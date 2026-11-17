@@ -29,11 +29,25 @@ public class MasterServiceImpl
     private final Map<String, FileMetadata> files =
             new ConcurrentHashMap<>();
 
+    private final ReplicationManager replicationManager =
+            new ReplicationManager();
+
     private final ScheduledExecutorService monitor =
             Executors.newSingleThreadScheduledExecutor(task -> {
 
                 Thread thread =
                         new Thread(task, "failure-detector");
+
+                thread.setDaemon(true);
+
+                return thread;
+            });
+
+    private final ScheduledExecutorService healingScheduler =
+            Executors.newSingleThreadScheduledExecutor(task -> {
+
+                Thread thread =
+                        new Thread(task, "self-healing");
 
                 thread.setDaemon(true);
 
@@ -49,6 +63,17 @@ public class MasterServiceImpl
                 2,
                 2,
                 TimeUnit.SECONDS
+        );
+
+        healingScheduler.scheduleWithFixedDelay(
+                this::runSelfHealing,
+                5,
+                5,
+                TimeUnit.SECONDS
+        );
+
+        System.out.println(
+                "[SELF-HEALING] Recovery service started"
         );
     }
 
@@ -72,6 +97,14 @@ public class MasterServiceImpl
                     + node.host()
                     + ":" + node.port()
             );
+
+            if (previous != null
+                    && previous.status() == NodeStatus.OFFLINE) {
+
+                System.out.println(
+                        "[RECOVERY] " + id + " is back online"
+                );
+            }
 
             return new NodeHealthInfo(
                     node,
@@ -108,7 +141,8 @@ public class MasterServiceImpl
                     previous.status() == NodeStatus.OFFLINE) {
 
                 System.out.println(
-                        "[RECOVERY] " + id
+                        "[RECOVERY] "
+                        + id
                         + " is back online"
                 );
             }
@@ -154,6 +188,24 @@ public class MasterServiceImpl
 
                         return health;
                     }
+            );
+        }
+    }
+
+    private void runSelfHealing() {
+
+        try {
+
+            replicationManager.repair(
+                    files,
+                    getNodeHealth()
+            );
+
+        } catch (Exception e) {
+
+            System.err.println(
+                    "[SELF-HEALING ERROR] "
+                    + e.getMessage()
             );
         }
     }
