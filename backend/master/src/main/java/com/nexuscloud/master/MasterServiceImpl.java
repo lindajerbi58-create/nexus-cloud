@@ -2,29 +2,54 @@ package com.nexuscloud.master;
 
 import com.nexuscloud.common.model.StorageNodeInfo;
 import com.nexuscloud.common.model.FileMetadata;
+import com.nexuscloud.common.model.NodeHealthInfo;
+import com.nexuscloud.common.model.NodeStatus;
 import com.nexuscloud.common.rmi.MasterService;
 
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class MasterServiceImpl
         extends UnicastRemoteObject
         implements MasterService {
 
-    private final Map<String, StorageNodeInfo> storageNodes;
+    private static final long HEARTBEAT_TIMEOUT = 10000;
 
-    private final Map<String, FileMetadata> files;
+    private final Map<String, NodeHealthInfo> nodes =
+            new ConcurrentHashMap<>();
+
+    private final Map<String, FileMetadata> files =
+            new ConcurrentHashMap<>();
+
+    private final ScheduledExecutorService monitor =
+            Executors.newSingleThreadScheduledExecutor(task -> {
+
+                Thread thread =
+                        new Thread(task, "failure-detector");
+
+                thread.setDaemon(true);
+
+                return thread;
+            });
 
     public MasterServiceImpl() throws RemoteException {
 
         super();
 
-        storageNodes = new ConcurrentHashMap<>();
-        files = new ConcurrentHashMap<>();
+        monitor.scheduleAtFixedRate(
+                this::detectFailures,
+                2,
+                2,
+                TimeUnit.SECONDS
+        );
     }
 
     @Override
@@ -36,6 +61,28 @@ public class MasterServiceImpl
     @Override
     public void registerNode(StorageNodeInfo node) {
 
+        validateNode(node);
+
+        nodes.compute(node.nodeId(), (id, previous) -> {
+
+            System.out.println(
+                    "[REGISTER] Storage node: "
+                    + node.nodeId()
+                    + " | "
+                    + node.host()
+                    + ":" + node.port()
+            );
+
+            return new NodeHealthInfo(
+                    node,
+                    NodeStatus.ONLINE,
+                    Instant.now()
+            );
+        });
+    }
+
+    private void validateNode(StorageNodeInfo node) {
+
         if (node == null
                 || node.nodeId() == null
                 || node.nodeId().isBlank()) {
@@ -44,22 +91,86 @@ public class MasterServiceImpl
                     "Invalid storage node"
             );
         }
+    }
 
-        storageNodes.put(node.nodeId(), node);
+    @Override
+    public void heartbeat(StorageNodeInfo node) {
 
-        System.out.println(
-                "[REGISTER] Storage node: "
-                + node.nodeId()
-                + " | "
-                + node.host()
-                + ":" + node.port()
-        );
+        validateNode(node);
+
+        nodes.compute(node.nodeId(), (id, previous) -> {
+
+            if (previous == null) {
+
+                System.out.println("[REGISTER] " + id);
+
+            } else if (
+                    previous.status() == NodeStatus.OFFLINE) {
+
+                System.out.println(
+                        "[RECOVERY] " + id
+                        + " is back online"
+                );
+            }
+
+            return new NodeHealthInfo(
+                    node,
+                    NodeStatus.ONLINE,
+                    Instant.now()
+            );
+        });
+    }
+
+    private void detectFailures() {
+
+        long now = System.currentTimeMillis();
+
+        for (String nodeId : nodes.keySet()) {
+
+            nodes.computeIfPresent(
+                    nodeId,
+                    (id, health) -> {
+
+                        long elapsed =
+                                now - health.lastHeartbeat()
+                                        .toEpochMilli();
+
+                        if (elapsed > HEARTBEAT_TIMEOUT
+                                && health.status()
+                                == NodeStatus.ONLINE) {
+
+                            System.out.println(
+                                    "[FAILURE DETECTED] "
+                                    + id
+                                    + " is offline"
+                            );
+
+                            return new NodeHealthInfo(
+                                    health.node(),
+                                    NodeStatus.OFFLINE,
+                                    health.lastHeartbeat()
+                            );
+                        }
+
+                        return health;
+                    }
+            );
+        }
+    }
+
+    @Override
+    public List<NodeHealthInfo> getNodeHealth() {
+
+        return new ArrayList<>(nodes.values());
     }
 
     @Override
     public List<StorageNodeInfo> getStorageNodes() {
 
-        return new ArrayList<>(storageNodes.values());
+        return nodes.values()
+                .stream()
+                .map(NodeHealthInfo::node)
+                .toList();
     }
 
     @Override
