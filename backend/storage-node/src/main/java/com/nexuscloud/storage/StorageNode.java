@@ -24,12 +24,23 @@ public class StorageNode {
             String nodeId = args[0];
             int port = Integer.parseInt(args[1]);
             String directory = args[2];
+            String host = "localhost";
 
             BlockStorage storage =
                     new BlockStorage(directory);
 
-            try (StorageServer server =
-                         new StorageServer(port, storage)) {
+            try (
+                    StorageServer server =
+                            new StorageServer(port, storage);
+
+                    HeartbeatService heartbeat =
+                            new HeartbeatService(
+                                    nodeId,
+                                    host,
+                                    port,
+                                    storage
+                            )
+            ) {
 
                 Registry registry =
                         LocateRegistry.getRegistry(
@@ -45,7 +56,7 @@ public class StorageNode {
                 StorageNodeInfo nodeInfo =
                         new StorageNodeInfo(
                                 nodeId,
-                                "localhost",
+                                host,
                                 port,
                                 storage.getTotalCapacity(),
                                 storage.getUsedCapacity()
@@ -71,6 +82,8 @@ public class StorageNode {
                 System.out.println(
                         "[SUCCESS] Registered with master"
                 );
+
+                heartbeat.start();
 
                 server.start();
             }
