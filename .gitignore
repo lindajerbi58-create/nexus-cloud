@@ -1,0 +1,34 @@
+# Java and Maven
+target/
+*.class
+*.jar
+*.war
+
+# Frontend
+node_modules/
+.next/
+dist/
+out/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Distributed storage
+data/
+storage-data/
+uploads/
+
+# Logs
+*.log
+logs/
+
+# Operating systems
+.DS_Store
+Thumbs.db
