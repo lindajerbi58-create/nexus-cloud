@@ -5,6 +5,8 @@
 
 data
 data/**
+data-docker
+data-docker/**
 frontend
 
 **/target
