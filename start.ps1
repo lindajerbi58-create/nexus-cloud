@@ -45,8 +45,9 @@ if ($LASTEXITCODE -ne 0) {
 docker compose --env-file .env.docker ps
 
 Write-Host ""
-Write-Host "Frontend: http://localhost:3000"
-Write-Host "API:      http://localhost:8080"
+Write-Host "Frontend: http://localhost:3100"
+Write-Host "API:      http://localhost:8180"
 Write-Host ""
+Write-Host "Persistent storage: data-docker"
 Write-Host "Check service status before signing in."
 Write-Host "========================================"
