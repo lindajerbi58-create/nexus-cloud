@@ -17,7 +17,6 @@ public class BlockTransferClient {
         Socket socket = new Socket();
 
         try {
-
             socket.connect(
                     new InetSocketAddress(
                             node.host(),
@@ -33,7 +32,6 @@ public class BlockTransferClient {
             return socket;
 
         } catch (IOException e) {
-
             socket.close();
             throw e;
         }
@@ -60,16 +58,10 @@ public class BlockTransferClient {
 
         try (
                 Socket socket = connect(node);
-
                 DataInputStream input =
-                        new DataInputStream(
-                                socket.getInputStream()
-                        );
-
+                        new DataInputStream(socket.getInputStream());
                 DataOutputStream output =
-                        new DataOutputStream(
-                                socket.getOutputStream()
-                        )
+                        new DataOutputStream(socket.getOutputStream())
         ) {
 
             output.writeUTF(StorageProtocol.GET);
@@ -108,16 +100,10 @@ public class BlockTransferClient {
 
         try (
                 Socket socket = connect(node);
-
                 DataInputStream input =
-                        new DataInputStream(
-                                socket.getInputStream()
-                        );
-
+                        new DataInputStream(socket.getInputStream());
                 DataOutputStream output =
-                        new DataOutputStream(
-                                socket.getOutputStream()
-                        )
+                        new DataOutputStream(socket.getOutputStream())
         ) {
 
             output.writeUTF(StorageProtocol.PUT);
@@ -129,51 +115,52 @@ public class BlockTransferClient {
             checkResponse(input);
         }
     }
+
     public boolean blockExists(
-        StorageNodeInfo node,
-        String blockId
-) throws IOException {
+            StorageNodeInfo node,
+            String blockId
+    ) throws IOException {
 
-    try (
-            Socket socket = connect(node);
-            DataInputStream input =
-                    new DataInputStream(socket.getInputStream());
-            DataOutputStream output =
-                    new DataOutputStream(socket.getOutputStream())
-    ) {
+        try (
+                Socket socket = connect(node);
+                DataInputStream input =
+                        new DataInputStream(socket.getInputStream());
+                DataOutputStream output =
+                        new DataOutputStream(socket.getOutputStream())
+        ) {
 
-        output.writeUTF(StorageProtocol.EXISTS);
-        output.writeUTF(blockId);
-        output.flush();
+            output.writeUTF(StorageProtocol.EXISTS);
+            output.writeUTF(blockId);
+            output.flush();
 
-        checkResponse(input);
+            checkResponse(input);
 
-        return input.readBoolean();
-    }
-}
-
-public void deleteBlock(
-        StorageNodeInfo node,
-        String blockId
-) throws IOException {
-
-    if (!blockExists(node, blockId)) {
-        return;
+            return input.readBoolean();
+        }
     }
 
-    try (
-            Socket socket = connect(node);
-            DataInputStream input =
-                    new DataInputStream(socket.getInputStream());
-            DataOutputStream output =
-                    new DataOutputStream(socket.getOutputStream())
-    ) {
+    public void deleteBlock(
+            StorageNodeInfo node,
+            String blockId
+    ) throws IOException {
 
-        output.writeUTF(StorageProtocol.DELETE);
-        output.writeUTF(blockId);
-        output.flush();
+        if (!blockExists(node, blockId)) {
+            return;
+        }
 
-        checkResponse(input);
+        try (
+                Socket socket = connect(node);
+                DataInputStream input =
+                        new DataInputStream(socket.getInputStream());
+                DataOutputStream output =
+                        new DataOutputStream(socket.getOutputStream())
+        ) {
+
+            output.writeUTF(StorageProtocol.DELETE);
+            output.writeUTF(blockId);
+            output.flush();
+
+            checkResponse(input);
+        }
     }
-}
 }
