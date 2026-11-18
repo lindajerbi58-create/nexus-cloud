@@ -3,10 +3,13 @@ package com.nexuscloud.api.exception;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.rmi.RemoteException;
 import java.rmi.NotBoundException;
@@ -25,11 +28,50 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(status)
                 .body(Map.of(
-                        "timestamp", Instant.now().toString(),
-                        "status", status.value(),
-                        "error", status.getReasonPhrase(),
-                        "message", message
+                        "timestamp",
+                        Instant.now().toString(),
+
+                        "status",
+                        status.value(),
+
+                        "error",
+                        status.getReasonPhrase(),
+
+                        "message",
+                        message
                 ));
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> statusError(
+            ResponseStatusException exception
+    ) {
+
+        HttpStatus status = HttpStatus.resolve(
+                exception.getStatusCode().value()
+        );
+
+        if (status == null) {
+            status = HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+
+        return error(
+                status,
+                exception.getReason() == null
+                        ? "Request failed"
+                        : exception.getReason()
+        );
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Map<String, Object>> forbidden(
+            AccessDeniedException exception
+    ) {
+
+        return error(
+                HttpStatus.FORBIDDEN,
+                "Access denied"
+        );
     }
 
     @ExceptionHandler({
