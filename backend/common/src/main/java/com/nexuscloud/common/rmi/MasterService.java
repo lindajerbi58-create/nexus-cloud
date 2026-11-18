@@ -27,20 +27,15 @@ public interface MasterService extends Remote {
     List<FileMetadata> listFiles()
             throws RemoteException;
 
-    default void heartbeat(StorageNodeInfo node)
-            throws RemoteException {
+    void heartbeat(StorageNodeInfo node)
+            throws RemoteException;
 
-        throw new RemoteException("Not implemented");
-    }
+    List<NodeHealthInfo> getNodeHealth()
+            throws RemoteException;
 
-    default List<NodeHealthInfo> getNodeHealth()
-            throws RemoteException {
-
-        throw new RemoteException("Not implemented");
-    }
     default void deleteFile(String fileId)
-        throws RemoteException {
+            throws RemoteException {
 
-    throw new RemoteException("Not implemented");
-}
+        throw new RemoteException("Not implemented");
+    }
 }
