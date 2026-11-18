@@ -1,4 +1,4 @@
-package main.java.com.nexuscloud.api.config;
+package com.nexuscloud.api.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
