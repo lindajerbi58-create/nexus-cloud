@@ -2,6 +2,7 @@ package com.nexuscloud.common.rmi;
 
 import com.nexuscloud.common.model.StorageNodeInfo;
 import com.nexuscloud.common.model.FileMetadata;
+import com.nexuscloud.common.model.NodeHealthInfo;
 
 import java.rmi.Remote;
 import java.rmi.RemoteException;
@@ -17,18 +18,29 @@ public interface MasterService extends Remote {
     List<StorageNodeInfo> getStorageNodes()
             throws RemoteException;
 
-    default void registerFile(FileMetadata file)
+    void registerFile(FileMetadata file)
+            throws RemoteException;
+
+    FileMetadata getFile(String fileId)
+            throws RemoteException;
+
+    List<FileMetadata> listFiles()
+            throws RemoteException;
+
+    default void heartbeat(StorageNodeInfo node)
             throws RemoteException {
+
         throw new RemoteException("Not implemented");
     }
 
-    default FileMetadata getFile(String fileId)
+    default List<NodeHealthInfo> getNodeHealth()
             throws RemoteException {
-        throw new RemoteException("Not implemented");
-    }
 
-    default List<FileMetadata> listFiles()
-            throws RemoteException {
         throw new RemoteException("Not implemented");
     }
+    default void deleteFile(String fileId)
+        throws RemoteException {
+
+    throw new RemoteException("Not implemented");
+}
 }
