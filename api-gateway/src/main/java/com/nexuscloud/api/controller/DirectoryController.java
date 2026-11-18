@@ -1,9 +1,13 @@
 package com.nexuscloud.api.controller;
 
-import com.nexuscloud.api.service.NexusService;
+import com.nexuscloud.api.service.WorkspaceService;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -13,33 +17,47 @@ import java.util.Map;
 @RequestMapping("/api/directories")
 public class DirectoryController {
 
-    private final NexusService service;
+    private final WorkspaceService workspace;
 
-    public DirectoryController(NexusService service) {
-        this.service = service;
+    public DirectoryController(
+            WorkspaceService workspace
+    ) {
+
+        this.workspace = workspace;
     }
 
-    public record DirectoryRequest(String path) {}
+    public record DirectoryRequest(
+            String path
+    ) {}
 
     @GetMapping
-    public List<String> list()
-            throws Exception {
+    public List<String> list(
+            @AuthenticationPrincipal Jwt jwt
+    ) throws Exception {
 
-        return service.listDirectories();
+        return workspace.listDirectories(jwt);
     }
 
     @GetMapping("/contents")
     public Map<String, Object> contents(
+
+            @AuthenticationPrincipal Jwt jwt,
+
             @RequestParam(defaultValue = "/")
             String path
+
     ) throws Exception {
 
-        return service.directoryContents(path);
+        return workspace.contents(jwt, path);
     }
 
     @PostMapping
     public ResponseEntity<Map<String, Object>> create(
+
+            @AuthenticationPrincipal Jwt jwt,
+
             @RequestBody DirectoryRequest request
+
     ) throws Exception {
 
         if (request.path() == null
@@ -50,7 +68,10 @@ public class DirectoryController {
             );
         }
 
-        service.createDirectory(request.path());
+        workspace.createDirectory(
+                jwt,
+                request.path()
+        );
 
         return ResponseEntity
                 .status(HttpStatus.CREATED)
@@ -62,10 +83,14 @@ public class DirectoryController {
 
     @DeleteMapping
     public ResponseEntity<Void> delete(
+
+            @AuthenticationPrincipal Jwt jwt,
+
             @RequestParam String path
+
     ) throws Exception {
 
-        service.deleteDirectory(path);
+        workspace.deleteDirectory(jwt, path);
 
         return ResponseEntity
                 .noContent()
