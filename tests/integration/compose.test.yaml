@@ -1,0 +1,149 @@
+name: nexus-cloud-test
+
+x-java: &java
+  image: nexus-cloud-test-java:local
+  init: true
+  restart: "no"
+
+services:
+
+  master:
+    <<: *java
+
+    build:
+      context: ../..
+      dockerfile: Dockerfile.java
+
+    command:
+      - java
+      - -Djava.rmi.server.hostname=127.0.0.1
+      - -cp
+      - master:common
+      - com.nexuscloud.master.MasterServer
+
+    ports:
+      - "127.0.0.1:${NEXUS_TEST_PORT:-8280}:8080"
+
+    volumes:
+      - master-test-data:/app/data/master
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "bash -c 'echo > /dev/tcp/127.0.0.1/1099'"
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+
+  node-01:
+    <<: *java
+
+    network_mode: "service:master"
+
+    depends_on:
+      master:
+        condition: service_healthy
+
+    command:
+      - java
+      - -cp
+      - storage-node:common
+      - com.nexuscloud.storage.StorageNode
+      - node-01
+      - "5001"
+      - data/node-01
+
+    volumes:
+      - node-01-test-data:/app/data/node-01
+
+  node-02:
+    <<: *java
+
+    network_mode: "service:master"
+
+    depends_on:
+      master:
+        condition: service_healthy
+
+    command:
+      - java
+      - -cp
+      - storage-node:common
+      - com.nexuscloud.storage.StorageNode
+      - node-02
+      - "5002"
+      - data/node-02
+
+    volumes:
+      - node-02-test-data:/app/data/node-02
+
+  node-03:
+    <<: *java
+
+    network_mode: "service:master"
+
+    depends_on:
+      master:
+        condition: service_healthy
+
+    command:
+      - java
+      - -cp
+      - storage-node:common
+      - com.nexuscloud.storage.StorageNode
+      - node-03
+      - "5003"
+      - data/node-03
+
+    volumes:
+      - node-03-test-data:/app/data/node-03
+
+  api:
+    <<: *java
+
+    network_mode: "service:master"
+
+    depends_on:
+      master:
+        condition: service_healthy
+      node-01:
+        condition: service_started
+      node-02:
+        condition: service_started
+      node-03:
+        condition: service_started
+
+    environment:
+      SERVER_ADDRESS: "0.0.0.0"
+
+      SERVER_PORT: "8080"
+
+      NEXUS_MASTER_HOST: "127.0.0.1"
+
+      NEXUS_MASTER_PORT: "1099"
+
+      NEXUS_FRONTEND_ORIGIN: "http://localhost:3100"
+
+      NEXUS_JWT_SECRET: "${NEXUS_TEST_SECRET:?Test secret required}"
+
+      NEXUS_ADMIN_EMAIL: "ci-admin@example.test"
+
+      NEXUS_ADMIN_PASSWORD: "${NEXUS_TEST_PASSWORD:?Test password required}"
+
+      NEXUS_USER_FILE: "/app/data/security/users.properties"
+
+    command:
+      - java
+      - -jar
+      - api.jar
+
+    volumes:
+      - security-test-data:/app/data/security
+
+volumes:
+  master-test-data:
+  node-01-test-data:
+  node-02-test-data:
+  node-03-test-data:
+  security-test-data:
