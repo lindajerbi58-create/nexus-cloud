@@ -1,16 +1,15 @@
 import type { Metadata } from "next";
 
 import { Toaster } from "sonner";
-
 import { AuthProvider } from "@/context/AuthContext";
 
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "NEXUS Cloud | Distributed Storage",
+  title: "NEXUS® — Data Without Boundaries",
 
   description:
-    "Secure distributed cloud storage with intelligent replication, fault tolerance and infrastructure monitoring.",
+    "Distributed storage infrastructure. Engineered for resilience.",
 
   applicationName: "NEXUS Cloud",
 };
@@ -20,21 +19,37 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+
   return (
+
     <html lang="en">
+
       <body>
+
         <AuthProvider>
+
           {children}
 
           <Toaster
-            theme="dark"
+            theme="light"
             position="bottom-right"
             richColors
             closeButton
             duration={4000}
+            toastOptions={{
+              style: {
+                borderRadius: "0px",
+                border: "1px solid #121212",
+                fontFamily:
+                  "Helvetica Neue, Helvetica, Arial, sans-serif",
+              },
+            }}
           />
+
         </AuthProvider>
+
       </body>
+
     </html>
   );
 }
