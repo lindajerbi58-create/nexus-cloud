@@ -35,7 +35,12 @@ public class MasterServiceImpl
     private final Object metadataLock =
             new Object();
 
+    private final Object maintenanceLock =
+            new Object();
+
     private final MetadataStore metadataStore;
+
+    private final DeletionManager deletionManager;
 
     private final ReplicationManager replicationManager =
             new ReplicationManager();
@@ -77,7 +82,20 @@ public class MasterServiceImpl
                             )
                     );
 
+            deletionManager =
+                    new DeletionManager(
+                            Path.of(
+                                    "data",
+                                    "master",
+                                    "tombstones"
+                            )
+                    );
+
             files.putAll(metadataStore.load());
+
+            files.keySet().removeIf(
+                    deletionManager::isDeleted
+            );
 
         } catch (IOException e) {
 
@@ -108,6 +126,10 @@ public class MasterServiceImpl
 
         System.out.println(
                 "[SELF-HEALING] Recovery service started"
+        );
+
+        System.out.println(
+                "[CLEANUP] Distributed deletion service started"
         );
     }
 
@@ -231,51 +253,55 @@ public class MasterServiceImpl
 
         try {
 
-            Map<String, FileMetadata> original;
+            synchronized (maintenanceLock) {
 
-            synchronized (metadataLock) {
+                Map<String, FileMetadata> original;
 
-                original = new HashMap<>(files);
-            }
+                synchronized (metadataLock) {
 
-            Map<String, FileMetadata> repaired =
-                    new HashMap<>(original);
-
-            replicationManager.repair(
-                    repaired,
-                    getNodeHealth()
-            );
-
-            synchronized (metadataLock) {
-
-                Map<String, FileMetadata> updated =
-                        new HashMap<>(files);
-
-                for (String id : original.keySet()) {
-
-                    FileMetadata before =
-                            original.get(id);
-
-                    FileMetadata after =
-                            repaired.get(id);
-
-                    if (after != null
-                            && !before.equals(after)
-                            && before.equals(files.get(id))) {
-
-                        updated.put(id, after);
-                    }
+                    original = new HashMap<>(files);
                 }
 
-                if (!updated.equals(files)) {
+                Map<String, FileMetadata> repaired =
+                        new HashMap<>(original);
 
-                    metadataStore.save(updated);
+                replicationManager.repair(
+                        repaired,
+                        getNodeHealth()
+                );
 
-                    files.putAll(updated);
+                synchronized (metadataLock) {
 
-                    System.out.println(
-                            "[PERSISTENCE] Repaired metadata saved"
-                    );
+                    Map<String, FileMetadata> updated =
+                            new HashMap<>(files);
+
+                    for (String id : original.keySet()) {
+
+                        FileMetadata before =
+                                original.get(id);
+
+                        FileMetadata after =
+                                repaired.get(id);
+
+                        if (after != null
+                                && !deletionManager.isDeleted(id)
+                                && !before.equals(after)
+                                && before.equals(files.get(id))) {
+
+                            updated.put(id, after);
+                        }
+                    }
+
+                    if (!updated.equals(files)) {
+
+                        metadataStore.save(updated);
+
+                        files.putAll(updated);
+
+                        System.out.println(
+                                "[PERSISTENCE] Repaired metadata saved"
+                        );
+                    }
                 }
             }
 
@@ -283,6 +309,20 @@ public class MasterServiceImpl
 
             System.err.println(
                     "[SELF-HEALING ERROR] "
+                    + e.getMessage()
+            );
+        }
+
+        try {
+
+            deletionManager.cleanup(
+                    getNodeHealth()
+            );
+
+        } catch (Exception e) {
+
+            System.err.println(
+                    "[CLEANUP ERROR] "
                     + e.getMessage()
             );
         }
@@ -317,6 +357,13 @@ public class MasterServiceImpl
         }
 
         synchronized (metadataLock) {
+
+            if (deletionManager.isDeleted(file.fileId())) {
+
+                throw new RemoteException(
+                        "Deleted file identifier cannot be reused"
+                );
+            }
 
             if (files.containsKey(file.fileId())) {
 
@@ -360,7 +407,8 @@ public class MasterServiceImpl
 
         synchronized (metadataLock) {
 
-            FileMetadata file = files.get(fileId);
+            FileMetadata file =
+                    files.get(fileId);
 
             if (file == null) {
 
@@ -379,6 +427,66 @@ public class MasterServiceImpl
         synchronized (metadataLock) {
 
             return new ArrayList<>(files.values());
+        }
+    }
+
+    @Override
+    public void deleteFile(String fileId)
+            throws RemoteException {
+
+        synchronized (maintenanceLock) {
+
+            synchronized (metadataLock) {
+
+                if (deletionManager.isDeleted(fileId)) {
+
+                    return;
+                }
+
+                FileMetadata file =
+                        files.get(fileId);
+
+                if (file == null) {
+
+                    throw new RemoteException(
+                            "File not found: " + fileId
+                    );
+                }
+
+                try {
+
+                    deletionManager.markDeleted(file);
+
+                } catch (IOException e) {
+
+                    throw new RemoteException(
+                            "Unable to persist deletion",
+                            e
+                    );
+                }
+
+                files.remove(fileId);
+
+                try {
+
+                    metadataStore.save(
+                            new HashMap<>(files)
+                    );
+
+                } catch (IOException e) {
+
+                    System.err.println(
+                            "[PERSISTENCE WARNING] "
+                            + e.getMessage()
+                    );
+                }
+
+                System.out.println(
+                        "[FILE DELETED] "
+                        + file.fileName()
+                        + " | ID: " + fileId
+                );
+            }
         }
     }
 }
