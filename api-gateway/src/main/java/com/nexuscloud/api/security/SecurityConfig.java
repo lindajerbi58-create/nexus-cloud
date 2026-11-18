@@ -11,16 +11,20 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+
 import org.springframework.security.oauth2.jwt.*;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
+
 import org.springframework.security.web.SecurityFilterChain;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+
 import java.util.Base64;
 
 @Configuration
@@ -35,10 +39,14 @@ public class SecurityConfig {
 
     @Bean
     public SecretKey jwtSecretKey(
-            @Value("${NEXUS_JWT_SECRET}") String secret
+
+            @Value("${NEXUS_JWT_SECRET}")
+            String secret
+
     ) {
 
-        byte[] key = Base64.getDecoder().decode(secret);
+        byte[] key =
+                Base64.getDecoder().decode(secret);
 
         if (key.length < 32) {
 
@@ -54,7 +62,9 @@ public class SecurityConfig {
     }
 
     @Bean
-    public JwtEncoder jwtEncoder(SecretKey key) {
+    public JwtEncoder jwtEncoder(
+            SecretKey key
+    ) {
 
         return new NimbusJwtEncoder(
                 new ImmutableSecret<>(key)
@@ -62,7 +72,9 @@ public class SecurityConfig {
     }
 
     @Bean
-    public JwtDecoder jwtDecoder(SecretKey key) {
+    public JwtDecoder jwtDecoder(
+            SecretKey key
+    ) {
 
         NimbusJwtDecoder decoder =
                 NimbusJwtDecoder.withSecretKey(key)
@@ -100,11 +112,15 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(
+
             HttpSecurity http,
+
             JwtAuthenticationConverter converter
+
     ) throws Exception {
 
         http
+
                 .csrf(csrf -> csrf.disable())
 
                 .cors(Customizer.withDefaults())
@@ -138,12 +154,15 @@ public class SecurityConfig {
                         ).authenticated()
 
                         .requestMatchers(
+                                "/api/cluster/**"
+                        ).hasRole("ADMIN")
+
+                        .requestMatchers(
                                 "/api/files",
                                 "/api/files/**",
                                 "/api/directories",
-                                "/api/directories/**",
-                                "/api/cluster/**"
-                        ).hasRole("ADMIN")
+                                "/api/directories/**"
+                        ).hasAnyRole("USER", "ADMIN")
 
                         .anyRequest().denyAll()
                 )
