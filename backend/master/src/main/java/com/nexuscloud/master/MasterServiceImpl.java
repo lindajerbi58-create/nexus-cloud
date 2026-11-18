@@ -6,10 +6,13 @@ import com.nexuscloud.common.model.NodeHealthInfo;
 import com.nexuscloud.common.model.NodeStatus;
 import com.nexuscloud.common.rmi.MasterService;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,6 +31,11 @@ public class MasterServiceImpl
 
     private final Map<String, FileMetadata> files =
             new ConcurrentHashMap<>();
+
+    private final Object metadataLock =
+            new Object();
+
+    private final MetadataStore metadataStore;
 
     private final ReplicationManager replicationManager =
             new ReplicationManager();
@@ -57,6 +65,32 @@ public class MasterServiceImpl
     public MasterServiceImpl() throws RemoteException {
 
         super();
+
+        try {
+
+            metadataStore =
+                    new MetadataStore(
+                            Path.of(
+                                    "data",
+                                    "master",
+                                    "metadata.bin"
+                            )
+                    );
+
+            files.putAll(metadataStore.load());
+
+        } catch (IOException e) {
+
+            UnicastRemoteObject.unexportObject(
+                    this,
+                    true
+            );
+
+            throw new RemoteException(
+                    "Metadata initialization failed",
+                    e
+            );
+        }
 
         monitor.scheduleAtFixedRate(
                 this::detectFailures,
@@ -102,7 +136,8 @@ public class MasterServiceImpl
                     && previous.status() == NodeStatus.OFFLINE) {
 
                 System.out.println(
-                        "[RECOVERY] " + id + " is back online"
+                        "[RECOVERY] "
+                        + id + " is back online"
                 );
             }
 
@@ -135,15 +170,16 @@ public class MasterServiceImpl
 
             if (previous == null) {
 
-                System.out.println("[REGISTER] " + id);
+                System.out.println(
+                        "[REGISTER] " + id
+                );
 
             } else if (
                     previous.status() == NodeStatus.OFFLINE) {
 
                 System.out.println(
                         "[RECOVERY] "
-                        + id
-                        + " is back online"
+                        + id + " is back online"
                 );
             }
 
@@ -175,8 +211,7 @@ public class MasterServiceImpl
 
                             System.out.println(
                                     "[FAILURE DETECTED] "
-                                    + id
-                                    + " is offline"
+                                    + id + " is offline"
                             );
 
                             return new NodeHealthInfo(
@@ -196,10 +231,53 @@ public class MasterServiceImpl
 
         try {
 
+            Map<String, FileMetadata> original;
+
+            synchronized (metadataLock) {
+
+                original = new HashMap<>(files);
+            }
+
+            Map<String, FileMetadata> repaired =
+                    new HashMap<>(original);
+
             replicationManager.repair(
-                    files,
+                    repaired,
                     getNodeHealth()
             );
+
+            synchronized (metadataLock) {
+
+                Map<String, FileMetadata> updated =
+                        new HashMap<>(files);
+
+                for (String id : original.keySet()) {
+
+                    FileMetadata before =
+                            original.get(id);
+
+                    FileMetadata after =
+                            repaired.get(id);
+
+                    if (after != null
+                            && !before.equals(after)
+                            && before.equals(files.get(id))) {
+
+                        updated.put(id, after);
+                    }
+                }
+
+                if (!updated.equals(files)) {
+
+                    metadataStore.save(updated);
+
+                    files.putAll(updated);
+
+                    System.out.println(
+                            "[PERSISTENCE] Repaired metadata saved"
+                    );
+                }
+            }
 
         } catch (Exception e) {
 
@@ -238,11 +316,33 @@ public class MasterServiceImpl
             );
         }
 
-        if (files.putIfAbsent(file.fileId(), file) != null) {
+        synchronized (metadataLock) {
 
-            throw new RemoteException(
-                    "File identifier already exists"
-            );
+            if (files.containsKey(file.fileId())) {
+
+                throw new RemoteException(
+                        "File identifier already exists"
+                );
+            }
+
+            Map<String, FileMetadata> updated =
+                    new HashMap<>(files);
+
+            updated.put(file.fileId(), file);
+
+            try {
+
+                metadataStore.save(updated);
+
+                files.put(file.fileId(), file);
+
+            } catch (IOException e) {
+
+                throw new RemoteException(
+                        "Unable to persist file metadata",
+                        e
+                );
+            }
         }
 
         System.out.println(
@@ -258,21 +358,27 @@ public class MasterServiceImpl
     public FileMetadata getFile(String fileId)
             throws RemoteException {
 
-        FileMetadata file = files.get(fileId);
+        synchronized (metadataLock) {
 
-        if (file == null) {
+            FileMetadata file = files.get(fileId);
 
-            throw new RemoteException(
-                    "File not found: " + fileId
-            );
+            if (file == null) {
+
+                throw new RemoteException(
+                        "File not found: " + fileId
+                );
+            }
+
+            return file;
         }
-
-        return file;
     }
 
     @Override
     public List<FileMetadata> listFiles() {
 
-        return new ArrayList<>(files.values());
+        synchronized (metadataLock) {
+
+            return new ArrayList<>(files.values());
+        }
     }
 }
