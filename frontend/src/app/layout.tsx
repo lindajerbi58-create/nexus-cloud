@@ -6,6 +6,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 
 import "./globals.css";
+import "./v2.css";
 
 export const metadata: Metadata = {
   title: {
