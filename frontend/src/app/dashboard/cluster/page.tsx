@@ -1,463 +1,1541 @@
 "use client";
 
 import {
-  useEffect, useState, useCallback, useRef
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
 } from "react";
 
 import {
-  Server, Database, Activity, RefreshCw,
-  ShieldCheck, AlertTriangle,
-  LoaderCircle, Clock, Layers3
+  Network,
+  Server,
+  Database,
+  Activity,
+  ArrowUpRight,
+  Layers3,
+  HardDrive,
+  ShieldCheck,
+  AlertTriangle,
+  RefreshCw,
+  Pause,
+  Play,
+  Check,
+  Minus,
+  X,
+  Clock,
+  FileText,
+  Radio,
+  Terminal,
+  LoaderCircle,
+  ChevronRight,
 } from "lucide-react";
 
 import { useAuth } from "@/context/AuthContext";
-import { clusterApi, ApiException } from "@/lib/api";
-import { formatBytes, formatDate, percentage } from "@/lib/utils";
+
+import {
+  clusterApi,
+  filesApi,
+  ApiException,
+} from "@/lib/api";
+
+import {
+  formatBytes,
+  formatDate,
+  percentage,
+} from "@/lib/utils";
 
 import type {
-  ClusterStats, NodeHealth
+  ClusterStats,
+  NodeHealth,
+  FileMetadata,
 } from "@/types";
 
-interface EventEntry {
+interface Snapshot {
+  stats: ClusterStats;
+  nodes: NodeHealth[];
+  files: FileMetadata[];
+  timestamp: number;
+}
+
+interface InfrastructureEvent {
   id: number;
-  time: string;
+  timestamp: number;
+  type: "system" | "warning" | "success" | "storage";
   message: string;
-  warning: boolean;
+}
+
+const eventColors = {
+  system: "text-zinc-400",
+  warning: "text-red-400",
+  success: "text-emerald-400",
+  storage: "text-orange-400",
+};
+
+function Metric({
+  label,
+  value,
+  description,
+  color = "text-white",
+}: {
+  label: string;
+  value: string | number;
+  description: string;
+  color?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-[#191b20] p-5">
+      <p className="text-xs font-medium text-zinc-400">
+        {label}
+      </p>
+
+      <p className={`mt-5 text-3xl font-semibold tracking-tight ${color}`}>
+        {value}
+      </p>
+
+      <p className="mt-3 text-xs text-zinc-500">
+        {description}
+      </p>
+    </div>
+  );
 }
 
 export default function ClusterPage() {
 
   const { user, token, logout } = useAuth();
 
-  const [stats, setStats] = useState<ClusterStats | null>(null);
-  const [nodes, setNodes] = useState<NodeHealth[]>([]);
-  const [events, setEvents] = useState<EventEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [updated, setUpdated] = useState("");
+  const [snapshot, setSnapshot] =
+    useState<Snapshot | null>(null);
+
+  const [events, setEvents] =
+    useState<InfrastructureEvent[]>([]);
+
   const [live, setLive] = useState(true);
 
-  const previous = useRef<NodeHealth[]>([]);
-  const previousStats = useRef<ClusterStats | null>(null);
-  const initialized = useRef(false);
-  const eventId = useRef(0);
-  const inFlight = useRef(false);
+  const [loading, setLoading] =
+    useState(true);
 
-  const refresh = useCallback(async (signal?: AbortSignal) => {
+  const [refreshing, setRefreshing] =
+    useState(false);
 
-    if (!token || user?.role !== "ADMIN" || inFlight.current) return;
+  const [error, setError] = useState("");
 
-    inFlight.current = true;
+  const [selectedNode, setSelectedNode] =
+    useState<string | null>(null);
+
+  const [selectedFile, setSelectedFile] =
+    useState("");
+
+  const previous = useRef<Snapshot | null>(null);
+
+  const eventSequence = useRef(0);
+
+  const requestGeneration = useRef(0);
+
+  const busy = useRef(false);
+
+  const isAdmin = user?.role === "ADMIN";
+
+  const refresh = useCallback(async () => {
+
+    if (!token || !isAdmin || busy.current) {
+      return;
+    }
+
+    busy.current = true;
+
+    const generation = requestGeneration.current;
+
+    setRefreshing(true);
 
     try {
 
-      const [nextStats, nextNodes] = await Promise.all([
-        clusterApi.stats(token),
-        clusterApi.nodes(token)
-      ]);
+      const [stats, nodes, files] =
+        await Promise.all([
+          clusterApi.stats(token),
+          clusterApi.nodes(token),
+          filesApi.list(token),
+        ]);
 
-      if (signal?.aborted) return;
-
-      const now = new Date().toISOString();
-      const changes: EventEntry[] = [];
-
-      function addEvent(message: string, warning = false) {
-        changes.push({
-          id: ++eventId.current,
-          time: now,
-          message,
-          warning
-        });
-      }
-
-      if (!initialized.current) {
-
-        addEvent("Initial telemetry received");
-
-      } else {
-
-        for (const node of nextNodes) {
-          const old = previous.current.find(
-            item => item.node.nodeId === node.node.nodeId
-          );
-
-          if (!old) {
-            addEvent(`${node.node.nodeId} discovered`);
-          } else if (old.status !== node.status) {
-            addEvent(
-              `${node.node.nodeId}: ${old.status} → ${node.status}`,
-              node.status === "OFFLINE"
-            );
-          }
-        }
-
-        const oldStats = previousStats.current;
-
-        if (oldStats) {
-
-          if (nextStats.underReplicatedBlocks > oldStats.underReplicatedBlocks) {
-            addEvent(
-              `Under-replicated blocks increased to ${nextStats.underReplicatedBlocks}`,
-              true
-            );
-          }
-
-          if (nextStats.underReplicatedBlocks < oldStats.underReplicatedBlocks) {
-            addEvent(
-              `Under-replicated blocks decreased to ${nextStats.underReplicatedBlocks}`
-            );
-          }
-
-          if (nextStats.status !== oldStats.status) {
-            addEvent(
-              `Cluster status: ${nextStats.status}`,
-              nextStats.status === "DEGRADED"
-            );
-          }
-
-          if (nextStats.totalFiles !== oldStats.totalFiles) {
-            addEvent(`Stored files: ${nextStats.totalFiles}`);
-          }
-        }
-      }
-
-      initialized.current = true;
-      previous.current = nextNodes;
-      previousStats.current = nextStats;
-
-      setStats(nextStats);
-      setNodes(nextNodes);
-
-      if (changes.length) {
-        setEvents(old => [...changes.reverse(), ...old].slice(0, 50));
-      }
-
-      setUpdated(now);
-      setError("");
-
-    } catch (error) {
-
-      if (signal?.aborted) return;
-
-      if (error instanceof ApiException && error.status === 401) {
-        logout();
+      if (generation !== requestGeneration.current) {
         return;
       }
 
-      setError(error instanceof Error ? error.message : "Cluster unavailable");
+      const next: Snapshot = {
+        stats,
+        nodes,
+        files,
+        timestamp: Date.now(),
+      };
+
+      const old = previous.current;
+
+      const changes: InfrastructureEvent[] = [];
+
+      function addEvent(
+        type: InfrastructureEvent["type"],
+        message: string
+      ) {
+        changes.push({
+          id: ++eventSequence.current,
+          timestamp: next.timestamp,
+          type,
+          message,
+        });
+      }
+
+      if (!old) {
+
+        addEvent(
+          "success",
+          "Infrastructure telemetry connected"
+        );
+
+        addEvent(
+          "system",
+          `${nodes.length} storage nodes registered`
+        );
+
+      } else {
+
+        for (const node of nodes) {
+
+          const oldNode = old.nodes.find(
+            item =>
+              item.node.nodeId === node.node.nodeId
+          );
+
+          if (!oldNode) {
+
+            addEvent(
+              "system",
+              `${node.node.nodeId} discovered`
+            );
+
+          } else if (
+            oldNode.status !== node.status
+          ) {
+
+            addEvent(
+              node.status === "OFFLINE"
+                ? "warning"
+                : "success",
+
+              `${node.node.nodeId}: ${oldNode.status} → ${node.status}`
+            );
+
+          }
+        }
+
+        const oldCount =
+          old.stats.underReplicatedBlocks;
+
+        const nextCount =
+          stats.underReplicatedBlocks;
+
+        if (nextCount > oldCount) {
+
+          addEvent(
+            "warning",
+            `Under-replicated blocks: ${oldCount} → ${nextCount}`
+          );
+
+        }
+
+        if (nextCount < oldCount) {
+
+          addEvent(
+            "success",
+            `Under-replicated blocks decreased: ${oldCount} → ${nextCount}`
+          );
+
+        }
+
+        if (
+          oldCount > 0 &&
+          nextCount === 0
+        ) {
+
+          addEvent(
+            "success",
+            "Replication target restored in observed metadata"
+          );
+
+        }
+
+        const oldFiles = new Map(
+          old.files.map(file => [
+            file.fileId,
+            file,
+          ])
+        );
+
+        const newFileIds = new Set(
+          files.map(file => file.fileId)
+        );
+
+        for (const file of files) {
+
+          const previousFile =
+            oldFiles.get(file.fileId);
+
+          if (!previousFile) {
+
+            addEvent(
+              "storage",
+              `New stored file observed: ${file.fileName}`
+            );
+
+            continue;
+          }
+
+          const previousBlocks = new Map(
+            previousFile.blocks.map(
+              block => [block.blockId, block]
+            )
+          );
+
+          for (const block of file.blocks) {
+
+            const previousBlock =
+              previousBlocks.get(block.blockId);
+
+            if (!previousBlock) continue;
+
+            const addedNodes =
+              block.replicaNodeIds.filter(
+                node =>
+                  !previousBlock.replicaNodeIds.includes(node)
+              );
+
+            const removedNodes =
+              previousBlock.replicaNodeIds.filter(
+                node =>
+                  !block.replicaNodeIds.includes(node)
+              );
+
+            if (
+              addedNodes.length ||
+              removedNodes.length
+            ) {
+
+              addEvent(
+                "storage",
+                `${file.fileName} / Block ${block.index + 1}: replica locations changed`
+              );
+
+            }
+          }
+        }
+
+        for (const file of old.files) {
+
+          if (!newFileIds.has(file.fileId)) {
+
+            addEvent(
+              "storage",
+              `File removed: ${file.fileName}`
+            );
+
+          }
+        }
+
+        if (
+          old.stats.status !== stats.status
+        ) {
+
+          addEvent(
+            stats.status === "HEALTHY"
+              ? "success"
+              : "warning",
+
+            `Cluster status: ${stats.status}`
+          );
+
+        }
+      }
+
+      previous.current = next;
+
+      setSnapshot(next);
+
+      setError("");
+
+      if (changes.length > 0) {
+
+        setEvents(oldEvents =>
+          [
+            ...changes.reverse(),
+            ...oldEvents,
+          ].slice(0, 100)
+        );
+
+      }
+
+    } catch (err) {
+
+      if (generation !== requestGeneration.current) {
+        return;
+      }
+
+      if (
+        err instanceof ApiException &&
+        err.status === 401
+      ) {
+
+        logout();
+
+        return;
+
+      }
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Infrastructure unavailable"
+      );
 
     } finally {
-      inFlight.current = false;
 
-      if (!signal?.aborted) {
+      busy.current = false;
+
+      if (generation === requestGeneration.current) {
+
         setLoading(false);
+
+        setRefreshing(false);
+
       }
     }
 
-  }, [token, user?.role, logout]);
+  }, [token, isAdmin, logout]);
 
   useEffect(() => {
 
-    const controller = new AbortController();
+    requestGeneration.current++;
 
-    void refresh(controller.signal);
+    previous.current = null;
 
-    const timer = live
-      ? window.setInterval(() => void refresh(controller.signal), 3000)
-      : undefined;
+    setSnapshot(null);
+
+    setEvents([]);
+
+    setLoading(true);
 
     return () => {
-      controller.abort();
-      window.clearInterval(timer);
+      requestGeneration.current++;
     };
 
-  }, [refresh, live]);
+  }, [token, isAdmin]);
 
-  if (user?.role !== "ADMIN") {
+  useEffect(() => {
+
+    if (!token || !isAdmin) return;
+
+    let active = true;
+
+    let timer: number | undefined;
+
+    async function poll() {
+
+      await refresh();
+
+      if (active && live) {
+
+        timer = window.setTimeout(
+          poll,
+          3000
+        );
+
+      }
+    }
+
+    void poll();
+
+    return () => {
+
+      active = false;
+
+      window.clearTimeout(timer);
+
+    };
+
+  }, [refresh, live, token, isAdmin]);
+
+  const nodes = useMemo(
+    () => snapshot?.nodes || [],
+    [snapshot]
+  );
+
+  const files = useMemo(
+    () => snapshot?.files || [],
+    [snapshot]
+  );
+
+  const stats = snapshot?.stats;
+
+  const sortedNodes = useMemo(
+    () => [...nodes].sort(
+      (a, b) =>
+        a.node.nodeId.localeCompare(
+          b.node.nodeId
+        )
+    ),
+    [nodes]
+  );
+
+  const onlineIds = useMemo(
+    () => new Set(
+      nodes
+        .filter(node => node.status === "ONLINE")
+        .map(node => node.node.nodeId)
+    ),
+    [nodes]
+  );
+
+  const activeFile =
+    files.find(file => file.fileId === selectedFile)
+      || files[0];
+
+  const activeNode =
+    nodes.find(node => node.node.nodeId === selectedNode);
+
+  const nodeBlocks = useMemo(() => {
+
+    const result: Record<string, number> = {};
+
+    for (const file of files) {
+
+      for (const block of file.blocks) {
+
+        for (const node of block.replicaNodeIds) {
+
+          result[node] = (result[node] || 0) + 1;
+
+        }
+      }
+    }
+
+    return result;
+
+  }, [files]);
+
+  const unavailableBlocks = files.reduce(
+    (total, file) =>
+      total + file.blocks.filter(
+        block => !block.replicaNodeIds.some(
+          id => onlineIds.has(id)
+        )
+      ).length,
+    0
+  );
+
+  const availability = stats && stats.totalReplicas > 0
+    ? percentage(
+        stats.availableReplicas,
+        stats.totalReplicas
+      )
+    : null;
+
+  if (!isAdmin) {
+
     return (
-      <div className="border border-black/15 bg-white p-12">
-        <ShieldCheck size={40} className="text-[#ff5500]" />
-        <h1 className="mt-6 text-3xl font-black">ACCESS RESTRICTED.</h1>
-        <p className="mt-4 text-sm">Administrator privileges are required.</p>
+      <div className="rounded-xl border border-[var(--v2-border)] bg-[var(--v2-surface)] p-10">
+
+        <ShieldCheck
+          size={36}
+          className="text-orange-500"
+        />
+
+        <h1 className="mt-5 text-2xl font-bold">
+          Administrator access required
+        </h1>
+
+        <p className="mt-3 text-sm text-[var(--v2-muted)]">
+          Infrastructure monitoring is available to
+          administrator accounts only.
+        </p>
+
       </div>
     );
   }
 
-  const cards = stats ? [
-    ["ACTIVE NODES", `${stats.onlineNodes}/${stats.totalNodes}`],
-    ["OFFLINE NODES", stats.offlineNodes],
-    ["STORED FILES", stats.totalFiles],
-    ["TOTAL BLOCKS", stats.totalBlocks],
-    ["REGISTERED REPLICAS", stats.totalReplicas],
-    ["AVAILABLE REPLICAS", stats.availableReplicas],
-    ["UNDER-REPLICATED BLOCKS", stats.underReplicatedBlocks],
-    ["REPLICATION TARGET", `${stats.replicationFactor}×`]
-  ] : [];
-
   return (
-    <div className="animate-fade-in space-y-7">
 
-      <div className="flex flex-wrap items-end justify-between gap-5">
+    <div className="min-h-screen rounded-2xl bg-[#0d0e11] p-4 text-zinc-100 sm:p-7">
+
+      {/* Mission control header */}
+
+      <header className="flex flex-wrap items-center justify-between gap-5">
 
         <div>
-          <p className="industrial-label text-[#777772]">03 / INFRASTRUCTURE</p>
-          <h1 className="industrial-title mt-4 text-5xl sm:text-7xl">
-            CLUSTER<span className="text-[#ff5500]">.</span>
+
+          <div className="flex items-center gap-2 text-xs font-medium tracking-widest text-orange-400">
+
+            <Radio size={15} />
+
+            NEXUS / MISSION CONTROL
+
+          </div>
+
+          <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
+            Live infrastructure
           </h1>
-          <p className="mt-4 text-sm text-[#666660]">
-            Distributed infrastructure telemetry and resilience monitoring.
+
+          <p className="mt-3 text-sm text-zinc-400">
+            Observe your distributed storage system.
           </p>
+
         </div>
 
-        <div className="flex gap-3">
-          <button onClick={() => setLive(value => !value)}
-            className="nexus-button-secondary">
-            <Activity size={17} />
-            {live ? "Pause live" : "Resume live"}
+        <div className="flex items-center gap-2">
+
+          <button
+            onClick={() => setLive(value => !value)}
+            className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm hover:bg-white/10"
+          >
+
+            {live
+              ? <Pause size={16} />
+              : <Play size={16} />}
+
+            {live ? "Pause" : "Resume"}
+
           </button>
 
-          <button onClick={() => void refresh()} className="nexus-button">
-            <RefreshCw size={17} /> Refresh
+          <button
+            disabled={refreshing}
+            onClick={() => void refresh()}
+            className="flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-black hover:bg-orange-400"
+          >
+
+            <RefreshCw
+              size={16}
+              className={refreshing ? "animate-spin" : ""}
+            />
+
+            Refresh
+
           </button>
+
         </div>
-      </div>
 
-      <div className="flex flex-wrap justify-between gap-3 border-y border-black/15 py-4 text-xs">
-        <span className="flex items-center gap-2 font-bold">
-          <span className={`h-2 w-2 ${error ? "bg-red-600" : live && updated ? "bg-green-600 animate-pulse" : "bg-[#777772]"}`} />
-          {error ? "TELEMETRY UNAVAILABLE" : live ? "AUTO-REFRESH / 3 SEC" : "POLLING PAUSED"}
-        </span>
+      </header>
 
-        <span className="flex items-center gap-2 text-[#777772]">
+      {/* Connection status */}
+
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3">
+
+        <div className="flex items-center gap-2 text-xs">
+
+          <span className={`h-2 w-2 rounded-full ${
+            error ? "bg-red-500"
+              : live && snapshot
+                ? "animate-pulse bg-emerald-400"
+                : "bg-zinc-500"
+          }`} />
+
+          {error
+            ? "Connection unavailable"
+            : !snapshot
+              ? "Connecting"
+              : live
+                ? "Live telemetry · 3s polling"
+                : "Telemetry paused"}
+
+        </div>
+
+        <p className="flex items-center gap-2 text-xs text-zinc-500">
+
           <Clock size={14} />
-          {updated ? `Last update: ${formatDate(updated)}` : "Waiting for telemetry"}
-        </span>
+
+          {snapshot
+            ? new Date(
+                snapshot.timestamp
+              ).toLocaleTimeString()
+            : "Awaiting data"}
+
+        </p>
+
       </div>
 
       {error && (
-        <div role="alert" className="flex gap-3 border border-red-300 bg-red-50 p-4 text-sm text-red-800">
-          <AlertTriangle size={20} />
-          {error}. Previously received values may be stale.
+
+        <div role="alert" className="mt-5 flex gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
+
+          <AlertTriangle
+            size={20}
+            className="shrink-0"
+          />
+
+          {error}. Displayed information may be stale.
+
         </div>
+
       )}
 
-      {loading && !stats && (
-        <div className="flex justify-center p-12">
-          <LoaderCircle className="animate-spin text-[#ff5500]" />
+      {loading && !snapshot && (
+
+        <div className="flex items-center justify-center gap-3 py-24 text-zinc-400">
+
+          <LoaderCircle className="animate-spin text-orange-500" />
+
+          Connecting to the master server...
+
         </div>
+
       )}
 
-      {stats && (
+      {snapshot && stats && (
+
         <>
-          <section className="grid gap-px border border-black/15 bg-black/15 sm:grid-cols-2 xl:grid-cols-4">
-            {cards.map(([label, value], index) => (
-              <div key={label} className={`p-6 ${index === 0 ? "bg-[#ff5500]" : "bg-white"}`}>
-                <p className="industrial-label">{label}</p>
-                <p className="mt-6 text-4xl font-black tracking-tighter">{value}</p>
-              </div>
-            ))}
+
+          {/* Main metrics */}
+
+          <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+
+            <Metric
+              label="Active storage nodes"
+              value={`${stats.onlineNodes}/${stats.totalNodes}`}
+              description={`${stats.offlineNodes} offline`}
+              color="text-emerald-400"
+            />
+
+            <Metric
+              label="Replica availability"
+              value={
+                availability === null
+                  ? "N/A"
+                  : `${availability}%`
+              }
+              description={`${stats.availableReplicas} available replicas`}
+            />
+
+            <Metric
+              label="Under-replicated blocks"
+              value={stats.underReplicatedBlocks}
+              description="Compared with replication target"
+              color={
+                stats.underReplicatedBlocks > 0
+                  ? "text-amber-400"
+                  : "text-emerald-400"
+              }
+            />
+
+            <Metric
+              label="Unavailable blocks"
+              value={unavailableBlocks}
+              description="No registered online replica"
+              color={
+                unavailableBlocks > 0
+                  ? "text-red-400"
+                  : "text-emerald-400"
+              }
+            />
+
           </section>
 
-          <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
+          {/* Interactive topology */}
 
-            <section className="border border-black/15 bg-white">
+          <div className="mt-6 grid gap-5 xl:grid-cols-[1.6fr_1fr]">
 
-              <div className="flex items-center justify-between border-b border-black/15 p-5">
-                <h2 className="font-black">NETWORK TOPOLOGY</h2>
-                <span className="industrial-label">
-                  {error ? "STALE" : stats.status}
-                </span>
-              </div>
+            <section className="overflow-hidden rounded-xl border border-white/10 bg-[#14161a]">
 
-              <div className="industrial-grid overflow-x-auto p-6">
+              <div className="flex items-center justify-between gap-3 border-b border-white/10 p-5">
 
-                <div className="mx-auto flex w-40 flex-col items-center bg-[#ff5500] p-5">
+                <div>
 
-                  <Server size={32} />
-                  <p className="mt-3 font-black">MASTER</p>
-                  <p className="mt-1 font-mono text-xs">JAVA RMI</p>
-                  <p className="mt-3 text-[10px]">
-                    {error ? "STATUS UNKNOWN" : "TELEMETRY SOURCE"}
+                  <h2 className="font-semibold">
+                    Network topology
+                  </h2>
+
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Select a node to inspect its storage.
                   </p>
 
                 </div>
 
-                <div className="mx-auto h-10 w-px bg-black/40" />
+                <Network
+                  size={20}
+                  className="text-orange-400"
+                />
 
-                <div className="min-w-[260px] border-t border-black/40">
+              </div>
 
-                  <div className="grid gap-3 pt-8 sm:grid-cols-2 xl:grid-cols-3">
+              <div
+                className="overflow-x-auto p-6"
+                style={{
+                  backgroundImage:
+                    "radial-gradient(#ffffff12 1px, transparent 1px)",
+                  backgroundSize: "20px 20px",
+                }}
+              >
 
-                    {nodes.map(item => (
-                      <div key={item.node.nodeId}
-                        className={`relative border p-4 ${
-                          item.status === "ONLINE"
-                            ? "border-black bg-[#121212] text-white"
-                            : "border-red-500 bg-[#f2f1eb] text-[#121212]"
-                        }`}>
+                <div className="mx-auto w-48 rounded-xl border border-orange-400/40 bg-orange-500 p-5 text-black shadow-lg shadow-orange-500/10">
 
-                        <Database size={24}
-                          className={item.status === "ONLINE" ? "text-[#ff5500]" : "text-red-600"} />
+                  <Server size={27} />
 
-                        <h3 className="mt-3 break-all text-sm font-black">
-                          {item.node.nodeId.toUpperCase()}
-                        </h3>
+                  <p className="mt-3 font-bold">
+                    Master server
+                  </p>
 
-                        <p className={`mt-3 flex items-center gap-2 text-xs font-bold ${
-                          item.status === "ONLINE" ? "text-green-500" : "text-red-600"
-                        }`}>
-                          <span className="h-2 w-2 rounded-full bg-current" />
-                          {item.status}
-                        </p>
+                  <p className="mt-1 text-xs">
+                    Metadata coordinator
+                  </p>
 
-                        <p className="mt-2 break-all font-mono text-[10px] opacity-70">
-                          {item.node.host}:{item.node.port}
-                        </p>
-
-                      </div>
-                    ))}
-                  </div>
-
-                  {nodes.length === 0 && (
-                    <p className="p-6 text-center text-sm">No registered storage nodes.</p>
-                  )}
+                  <p className="mt-4 font-mono text-[10px]">
+                    JAVA RMI
+                  </p>
 
                 </div>
+
+                <div className="mx-auto h-10 w-px bg-orange-400/50" />
+
+                <div className="border-t border-orange-400/30">
+
+                  <div
+                    className="grid gap-3"
+                    style={{
+                      gridTemplateColumns:
+                        `repeat(${Math.max(1, Math.min(3, sortedNodes.length))}, minmax(110px, 1fr))`,
+                    }}
+                  >
+
+                    {sortedNodes.map(item => {
+
+                      const id = item.node.nodeId;
+
+                      const online =
+                        item.status === "ONLINE";
+
+                      const selected =
+                        selectedNode === id;
+
+                      return (
+
+                        <div key={id}>
+
+                          <div className={`mx-auto h-8 w-px ${
+                            online
+                              ? "bg-orange-400/50"
+                              : "bg-red-500/40"
+                          }`} />
+
+                          <button
+
+                            onClick={() =>
+                              setSelectedNode(id)
+                            }
+
+                            aria-pressed={selected}
+
+                            className={`w-full rounded-xl border p-4 text-left transition-all hover:-translate-y-1 ${
+                              selected
+                                ? "border-orange-400 bg-orange-500/10"
+                                : online
+                                  ? "border-white/10 bg-[#202329]"
+                                  : "border-red-500/40 bg-red-500/5"
+                            }`}
+
+                          >
+
+                            <div className="flex items-center justify-between">
+
+                              <Database
+                                size={23}
+                                className={
+                                  online
+                                    ? "text-orange-400"
+                                    : "text-red-400"
+                                }
+                              />
+
+                              <span className={`h-2.5 w-2.5 rounded-full ${
+                                online
+                                  ? "bg-emerald-400"
+                                  : "bg-red-500"
+                              }`} />
+
+                            </div>
+
+                            <p className="mt-4 break-all text-sm font-semibold">
+                              {id}
+                            </p>
+
+                            <p className={`mt-2 text-[10px] font-medium ${
+                              online
+                                ? "text-emerald-400"
+                                : "text-red-400"
+                            }`}>
+                              {item.status}
+                            </p>
+
+                            <div className="mt-4 rounded-lg bg-black/30 p-2">
+
+                              <p className="text-lg font-semibold">
+                                {nodeBlocks[id] || 0}
+                              </p>
+
+                              <p className="text-[10px] text-zinc-500">
+                                Registered blocks
+                              </p>
+
+                            </div>
+
+                          </button>
+
+                        </div>
+
+                      );
+                    })}
+
+                  </div>
+
+                </div>
+
+                {nodes.length === 0 && (
+
+                  <p className="py-8 text-center text-sm text-zinc-500">
+                    No storage nodes registered.
+                  </p>
+
+                )}
+
               </div>
+
+              <div className="flex flex-wrap gap-5 border-t border-white/10 p-4 text-xs text-zinc-500">
+
+                <span className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                  Online
+                </span>
+
+                <span className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-red-500" />
+                  Offline
+                </span>
+
+                <span className="flex items-center gap-2">
+                  <span className="h-0.5 w-5 bg-orange-400" />
+                  Logical connection
+                </span>
+
+              </div>
+
             </section>
 
-            <section className="border border-black/15 bg-[#121212] p-6 text-white">
+            {/* Node inspector */}
 
-              <Layers3 size={27} className="text-[#ff5500]" />
+            <section className="rounded-xl border border-white/10 bg-[#191b20] p-6">
 
-              <h2 className="mt-5 text-2xl font-black">
-                REPLICATION CONTROL.
-              </h2>
+              <div className="flex items-center justify-between">
 
-              <p className="industrial-label mt-8 text-white/50">
-                AVAILABLE / REGISTERED REPLICAS
-              </p>
+                <h2 className="font-semibold">
+                  Node inspector
+                </h2>
 
-              <p className="mt-4 text-5xl font-black text-[#ff5500]">
-                {stats.availableReplicas}/{stats.totalReplicas}
-              </p>
+                {activeNode ? (
 
-              <div className="mt-5 h-3 bg-white/15">
-                <div className="h-full bg-[#ff5500] transition-all duration-700"
-                  style={{
-                    width: `${percentage(stats.availableReplicas, stats.totalReplicas)}%`
-                  }} />
+                  <button
+                    onClick={() =>
+                      setSelectedNode(null)
+                    }
+                    aria-label="Close node inspector"
+                  >
+                    <X size={18} />
+                  </button>
+
+                ) : (
+
+                  <Database
+                    size={20}
+                    className="text-zinc-500"
+                  />
+
+                )}
+
               </div>
 
-              <div className="mt-8 border-t border-white/20 pt-5">
-                <p className="industrial-label text-white/50">REDUNDANCY STATUS</p>
+              {activeNode ? (
 
-                <p className="mt-3 text-xl font-black">
-                  {stats.underReplicatedBlocks > 0
-                    ? "REPAIR REQUIRED"
-                    : "TARGET SATISFIED"}
-                </p>
+                <div className="mt-6">
 
-                <p className="mt-3 text-xs leading-6 text-white/60">
-                  Automatic repair runs in the backend. This panel reads observed
-                  replica counts and does not control replication.
-                </p>
-              </div>
+                  <div className="flex items-center gap-4">
+
+                    <div className="rounded-xl bg-orange-500/10 p-4 text-orange-400">
+
+                      <Server size={30} />
+
+                    </div>
+
+                    <div className="min-w-0">
+
+                      <h3 className="break-all text-xl font-semibold">
+                        {activeNode.node.nodeId}
+                      </h3>
+
+                      <p className={`mt-2 text-xs ${
+                        activeNode.status === "ONLINE"
+                          ? "text-emerald-400"
+                          : "text-red-400"
+                      }`}>
+
+                        {activeNode.status}
+
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                  <div className="mt-7 space-y-5">
+
+                    <div>
+
+                      <p className="text-xs text-zinc-500">
+                        Network endpoint
+                      </p>
+
+                      <p className="mt-2 break-all font-mono text-sm">
+                        {activeNode.node.host}:{activeNode.node.port}
+                      </p>
+
+                    </div>
+
+                    <div>
+
+                      <p className="text-xs text-zinc-500">
+                        Reported capacity usage
+                      </p>
+
+                      <p className="mt-2 text-lg font-semibold">
+                        {formatBytes(
+                          activeNode.node.usedCapacity
+                        )}
+                      </p>
+
+                      <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
+
+                        <div
+                          className="h-full rounded-full bg-orange-500 transition-all"
+                          style={{
+                            width: `${
+                              percentage(
+                                activeNode.node.usedCapacity,
+                                activeNode.node.totalCapacity
+                              )
+                            }%`,
+                          }}
+                        />
+
+                      </div>
+
+                      <p className="mt-3 text-xs text-zinc-500">
+
+                        Total: {formatBytes(
+                          activeNode.node.totalCapacity
+                        )}
+
+                      </p>
+
+                    </div>
+
+                    <div>
+
+                      <p className="text-xs text-zinc-500">
+                        Registered block copies
+                      </p>
+
+                      <p className="mt-2 text-2xl font-semibold">
+                        {
+                          nodeBlocks[
+                            activeNode.node.nodeId
+                          ] || 0
+                        }
+                      </p>
+
+                    </div>
+
+                    <div>
+
+                      <p className="text-xs text-zinc-500">
+                        Last heartbeat
+                      </p>
+
+                      <p className="mt-2 text-sm">
+                        {formatDate(
+                          activeNode.lastHeartbeat
+                        )}
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+              ) : (
+
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+
+                    <Network
+                      size={35}
+                      className="text-orange-400"
+                    />
+
+                  </div>
+
+                  <p className="mt-6 font-semibold">
+                    Select a storage node
+                  </p>
+
+                  <p className="mt-3 max-w-56 text-xs leading-6 text-zinc-500">
+                    Inspect its network address, heartbeat,
+                    storage capacity and registered blocks.
+                  </p>
+
+                </div>
+
+              )}
 
             </section>
+
           </div>
 
-          <section className="grid gap-px border border-black/15 bg-black/15 sm:grid-cols-2">
+          {/* Replication matrix */}
 
-            <div className="bg-white p-6">
-              <p className="industrial-label text-[#777772]">LOGICAL STORAGE</p>
-              <p className="mt-4 text-4xl font-black">{formatBytes(stats.logicalBytes)}</p>
-              <p className="mt-3 text-xs text-[#777772]">Original file data</p>
+          <section className="mt-6 overflow-hidden rounded-xl border border-white/10 bg-[#191b20]">
+
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 p-5">
+
+              <div>
+
+                <h2 className="flex items-center gap-2 font-semibold">
+
+                  <Layers3
+                    size={20}
+                    className="text-orange-400"
+                  />
+
+                  Replication matrix
+
+                </h2>
+
+                <p className="mt-2 text-xs text-zinc-500">
+                  Inspect where each file block is registered.
+                </p>
+
+              </div>
+
+              {files.length > 0 && (
+
+                <select
+                  aria-label="Select file"
+                  value={activeFile?.fileId || ""}
+                  onChange={event =>
+                    setSelectedFile(event.target.value)
+                  }
+                  className="max-w-full rounded-lg border border-white/10 bg-[#101113] px-4 py-3 text-sm text-zinc-200"
+                >
+
+                  {files.map(file => (
+
+                    <option
+                      key={file.fileId}
+                      value={file.fileId}
+                    >
+                      {file.fileName}
+                    </option>
+
+                  ))}
+
+                </select>
+
+              )}
+
             </div>
 
-            <div className="bg-white p-6">
-              <p className="industrial-label text-[#777772]">PHYSICAL STORAGE</p>
-              <p className="mt-4 text-4xl font-black">{formatBytes(stats.physicalUsedBytes)}</p>
-              <p className="mt-3 text-xs text-[#777772]">Reported storage usage across nodes</p>
+            {activeFile ? (
+
+              <>
+
+                <div className="flex flex-wrap items-center gap-4 p-5">
+
+                  <FileText
+                    size={28}
+                    className="text-orange-400"
+                  />
+
+                  <div className="min-w-0 flex-1">
+
+                    <p className="break-all font-semibold">
+                      {activeFile.fileName}
+                    </p>
+
+                    <p className="mt-1 text-xs text-zinc-500">
+
+                      {formatBytes(activeFile.fileSize)}
+
+                      {" · "}
+
+                      {activeFile.blocks.length} blocks
+
+                    </p>
+
+                  </div>
+
+                  <div className="text-xs text-zinc-400">
+                    Target: {stats.replicationFactor} copies per block
+                  </div>
+
+                </div>
+
+                <div className="overflow-x-auto">
+
+                  <table className="w-full min-w-[520px] text-left text-sm">
+
+                    <thead className="border-y border-white/10 bg-black/20 text-xs text-zinc-400">
+
+                      <tr>
+
+                        <th className="p-4 font-medium">
+                          Block
+                        </th>
+
+                        {sortedNodes.map(item => (
+
+                          <th
+                            key={item.node.nodeId}
+                            className="p-4 text-center font-medium"
+                          >
+
+                            {item.node.nodeId}
+
+                          </th>
+
+                        ))}
+
+                        <th className="p-4 font-medium">
+                          Availability
+                        </th>
+
+                      </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                      {[...activeFile.blocks]
+                        .sort((a, b) => a.index - b.index)
+                        .map(block => {
+
+                          const available =
+                            block.replicaNodeIds.filter(
+                              id => onlineIds.has(id)
+                            ).length;
+
+                          return (
+
+                            <tr
+                              key={block.blockId}
+                              className="border-b border-white/5"
+                            >
+
+                              <td className="p-4">
+
+                                <p className="font-mono text-xs">
+                                  BLOCK {String(block.index + 1).padStart(3, "0")}
+                                </p>
+
+                                <p className="mt-2 text-[10px] text-zinc-500">
+
+                                  {formatBytes(block.size)}
+
+                                </p>
+
+                              </td>
+
+                              {sortedNodes.map(item => {
+
+                                const contains =
+                                  block.replicaNodeIds.includes(
+                                    item.node.nodeId
+                                  );
+
+                                const availableHere =
+                                  contains &&
+                                  item.status === "ONLINE";
+
+                                return (
+
+                                  <td
+                                    key={item.node.nodeId}
+                                    className="p-3"
+                                  >
+
+                                    <button
+
+                                      title={
+                                        contains
+                                          ? `${item.node.nodeId}: registered replica / ${item.status}`
+                                          : `${item.node.nodeId}: no registered replica`
+                                      }
+
+                                      aria-label={
+                                        contains
+                                          ? `Inspect ${item.node.nodeId}, replica registered`
+                                          : `Inspect ${item.node.nodeId}, no replica`
+                                      }
+
+                                      onClick={() =>
+                                        setSelectedNode(
+                                          item.node.nodeId
+                                        )
+                                      }
+
+                                      className={`flex h-10 w-full items-center justify-center rounded-md border ${
+                                        availableHere
+                                          ? "border-orange-500/40 bg-orange-500/20 text-orange-400"
+                                          : contains
+                                            ? "border-red-500/30 bg-red-500/10 text-red-400"
+                                            : "border-white/5 bg-white/[0.025] text-zinc-700"
+                                      }`}
+
+                                    >
+
+                                      {availableHere
+                                        ? <Check size={17} />
+                                        : contains
+                                          ? <AlertTriangle size={16} />
+                                          : <Minus size={15} />}
+
+                                    </button>
+
+                                  </td>
+
+                                );
+                              })}
+
+                              <td className="p-4">
+
+                                <span className={`text-xs font-medium ${
+                                  available === 0
+                                    ? "text-red-400"
+                                    : available < stats.replicationFactor
+                                      ? "text-amber-400"
+                                      : "text-emerald-400"
+                                }`}>
+
+                                  {available}/{stats.replicationFactor}
+
+                                </span>
+
+                              </td>
+
+                            </tr>
+
+                          );
+                        })}
+
+                    </tbody>
+
+                  </table>
+
+                </div>
+
+                <div className="flex flex-wrap gap-5 p-5 text-xs">
+
+                  <span className="flex items-center gap-2 text-orange-400">
+                    <Check size={14} />
+                    Registered replica on online node
+                  </span>
+
+                  <span className="flex items-center gap-2 text-red-400">
+                    <AlertTriangle size={14} />
+                    Replica on offline node
+                  </span>
+
+                  <span className="flex items-center gap-2 text-zinc-500">
+                    <Minus size={14} />
+                    No registered replica
+                  </span>
+
+                </div>
+
+              </>
+
+            ) : (
+
+              <div className="flex flex-col items-center gap-4 p-14 text-center">
+
+                <Layers3
+                  size={38}
+                  className="text-zinc-600"
+                />
+
+                <p className="text-sm text-zinc-400">
+                  Upload a file to explore block distribution.
+                </p>
+
+              </div>
+
+            )}
+
+          </section>
+
+          {/* Storage metrics */}
+
+          <section className="mt-6 grid gap-4 sm:grid-cols-2">
+
+            <div className="rounded-xl border border-white/10 bg-[#191b20] p-6">
+
+              <HardDrive
+                size={24}
+                className="text-orange-400"
+              />
+
+              <p className="mt-5 text-xs text-zinc-500">
+                Logical storage
+              </p>
+
+              <p className="mt-3 text-3xl font-semibold">
+                {formatBytes(stats.logicalBytes)}
+              </p>
+
+              <p className="mt-3 text-xs text-zinc-500">
+                Original data before replication
+              </p>
+
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-[#191b20] p-6">
+
+              <Database
+                size={24}
+                className="text-orange-400"
+              />
+
+              <p className="mt-5 text-xs text-zinc-500">
+                Physical storage
+              </p>
+
+              <p className="mt-3 text-3xl font-semibold">
+                {formatBytes(stats.physicalUsedBytes)}
+              </p>
+
+              <p className="mt-3 text-xs text-zinc-500">
+                Reported usage across storage nodes
+              </p>
+
             </div>
 
           </section>
 
-          <section>
-
-            <h2 className="mb-5 text-xl font-black">STORAGE NODES</h2>
-
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-
-              {nodes.map(item => {
-
-                const usage = percentage(
-                  item.node.usedCapacity,
-                  item.node.totalCapacity
-                );
-
-                return (
-                  <article key={item.node.nodeId} className="border border-black/15 bg-white p-6">
-
-                    <div className="flex items-center justify-between gap-2">
-                      <Server size={26} className="text-[#ff5500]" />
-                      <span className={`text-xs font-bold ${
-                        item.status === "ONLINE" ? "text-green-700" : "text-red-600"
-                      }`}>{item.status}</span>
-                    </div>
-
-                    <h3 className="mt-5 break-all text-xl font-black">{item.node.nodeId}</h3>
-
-                    <p className="mt-2 text-xs text-[#777772]">
-                      {item.node.host}:{item.node.port}
-                    </p>
-
-                    <div className="mt-6 h-2 bg-[#e8e7e0]">
-                      <div className="h-full bg-[#ff5500]" style={{ width: `${usage}%` }} />
-                    </div>
-
-                    <p className="mt-3 text-xs">
-                      {formatBytes(item.node.usedCapacity)} / {formatBytes(item.node.totalCapacity)}
-                    </p>
-
-                    <p className="mt-5 text-xs text-[#777772]">
-                      Last heartbeat: {formatDate(item.lastHeartbeat)}
-                    </p>
-
-                  </article>
-                );
-              })}
-            </div>
-          </section>
         </>
+
       )}
 
-      <section className="border border-black/15 bg-white">
+      {/* Live event terminal */}
 
-        <div className="flex items-center justify-between border-b border-black/15 p-5">
-          <h2 className="font-black">OBSERVED EVENTS</h2>
-          <Activity size={20} className="text-[#ff5500]" />
+      <section className="mt-6 overflow-hidden rounded-xl border border-white/10 bg-[#08090b]">
+
+        <div className="flex items-center justify-between border-b border-white/10 bg-[#14161a] p-5">
+
+          <div className="flex items-center gap-3">
+
+            <Terminal
+              size={20}
+              className="text-orange-400"
+            />
+
+            <div>
+
+              <h2 className="text-sm font-semibold">
+                Infrastructure event stream
+              </h2>
+
+              <p className="mt-1 text-[11px] text-zinc-500">
+                Observed changes during this session
+              </p>
+
+            </div>
+
+          </div>
+
+          <button
+            onClick={() => setEvents([])}
+            className="text-xs text-zinc-400 hover:text-white"
+          >
+            Clear
+          </button>
+
         </div>
 
-        {events.length === 0 ? (
-          <p className="p-6 text-sm text-[#777772]">No observed events yet.</p>
-        ) : (
-          <div className="max-h-96 overflow-y-auto">
-            {events.map(event => (
-              <div key={event.id} className="flex flex-wrap items-center gap-3 border-b border-black/10 p-4">
-                <span className={`h-2 w-2 ${event.warning ? "bg-red-600" : "bg-[#ff5500]"}`} />
-                <span className="flex-1 text-sm font-medium">{event.message}</span>
-                <time className="text-xs text-[#777772]">{formatDate(event.time)}</time>
-              </div>
-            ))}
-          </div>
-        )}
+        <div className="min-h-40 max-h-80 overflow-y-auto p-5 font-mono text-xs">
 
-        <p className="p-4 text-xs text-[#777772]">
-          Session-local observations. This is not a persistent backend audit log.
-        </p>
+          {events.length === 0 ? (
+
+            <p className="text-zinc-600">
+              Awaiting infrastructure events...
+            </p>
+
+          ) : (
+
+            <div className="space-y-3">
+
+              {events.map(event => (
+
+                <div
+                  key={event.id}
+                  className="flex flex-wrap items-start gap-3"
+                >
+
+                  <span className="text-zinc-600">
+
+                    {new Date(
+                      event.timestamp
+                    ).toLocaleTimeString()}
+
+                  </span>
+
+                  <span className={eventColors[event.type]}>
+
+                    [{event.type.toUpperCase()}]
+
+                  </span>
+
+                  <span className="min-w-32 flex-1 break-all text-zinc-300">
+
+                    {event.message}
+
+                  </span>
+
+                </div>
+
+              ))}
+
+            </div>
+
+          )}
+
+        </div>
 
       </section>
+
+      <footer className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 py-5 text-[11px] text-zinc-600">
+
+        <span>
+          NEXUS / Distributed Systems Control Center
+        </span>
+
+        <span>
+          Observational telemetry · Not a persistent audit log
+        </span>
+
+      </footer>
 
     </div>
   );
