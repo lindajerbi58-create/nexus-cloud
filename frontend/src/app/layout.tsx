@@ -1,17 +1,20 @@
 import type { Metadata } from "next";
 
 import { Toaster } from "sonner";
+
 import { AuthProvider } from "@/context/AuthContext";
+import { ThemeProvider } from "@/context/ThemeContext";
 
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "NEXUS® — Data Without Boundaries",
-
+  title: {
+    default: "Nexus — Distributed Cloud",
+    template: "%s | Nexus",
+  },
   description:
-    "Distributed storage infrastructure. Engineered for resilience.",
-
-  applicationName: "NEXUS Cloud",
+    "A modern workspace for distributed data storage.",
+  applicationName: "Nexus Cloud",
 };
 
 export default function RootLayout({
@@ -19,37 +22,28 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-
   return (
-
-    <html lang="en">
-
+    <html lang="en" suppressHydrationWarning>
       <body>
+        <ThemeProvider>
+          <AuthProvider>
+            {children}
 
-        <AuthProvider>
-
-          {children}
-
-          <Toaster
-            theme="light"
-            position="bottom-right"
-            richColors
-            closeButton
-            duration={4000}
-            toastOptions={{
-              style: {
-                borderRadius: "0px",
-                border: "1px solid #121212",
-                fontFamily:
-                  "Helvetica Neue, Helvetica, Arial, sans-serif",
-              },
-            }}
-          />
-
-        </AuthProvider>
-
+            <Toaster
+              position="bottom-right"
+              theme="system"
+              richColors
+              closeButton
+              duration={3500}
+              toastOptions={{
+                style: {
+                  borderRadius: "12px",
+                },
+              }}
+            />
+          </AuthProvider>
+        </ThemeProvider>
       </body>
-
     </html>
   );
 }
