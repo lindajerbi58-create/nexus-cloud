@@ -1,0 +1,176 @@
+name: nexus-cloud
+
+x-java-service: &java-service
+  image: nexus-cloud-java:local
+  init: true
+  restart: "on-failure:3"
+
+services:
+
+  master:
+    <<: *java-service
+
+    build:
+      context: .
+      dockerfile: Dockerfile.java
+
+    command:
+      - java
+      - -Djava.rmi.server.hostname=127.0.0.1
+      - -cp
+      - master:common
+      - com.nexuscloud.master.MasterServer
+
+    ports:
+      - "127.0.0.1:8080:8080"
+
+    volumes:
+      - ./data/master:/app/data/master
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "bash -c 'echo > /dev/tcp/127.0.0.1/1099'"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+
+  node-01:
+    <<: *java-service
+
+    network_mode: "service:master"
+
+    depends_on:
+      master:
+        condition: service_healthy
+
+    command:
+      - java
+      - -cp
+      - storage-node:common
+      - com.nexuscloud.storage.StorageNode
+      - node-01
+      - "5001"
+      - data/node-01
+
+    volumes:
+      - ./data/node-01:/app/data/node-01
+
+
+  node-02:
+    <<: *java-service
+
+    network_mode: "service:master"
+
+    depends_on:
+      master:
+        condition: service_healthy
+
+    command:
+      - java
+      - -cp
+      - storage-node:common
+      - com.nexuscloud.storage.StorageNode
+      - node-02
+      - "5002"
+      - data/node-02
+
+    volumes:
+      - ./data/node-02:/app/data/node-02
+
+
+  node-03:
+    <<: *java-service
+
+    network_mode: "service:master"
+
+    depends_on:
+      master:
+        condition: service_healthy
+
+    command:
+      - java
+      - -cp
+      - storage-node:common
+      - com.nexuscloud.storage.StorageNode
+      - node-03
+      - "5003"
+      - data/node-03
+
+    volumes:
+      - ./data/node-03:/app/data/node-03
+
+
+  api:
+    <<: *java-service
+
+    network_mode: "service:master"
+
+    depends_on:
+      master:
+        condition: service_healthy
+      node-01:
+        condition: service_started
+      node-02:
+        condition: service_started
+      node-03:
+        condition: service_started
+
+    environment:
+      SERVER_ADDRESS: "0.0.0.0"
+      SERVER_PORT: "8080"
+
+      NEXUS_MASTER_HOST: "127.0.0.1"
+      NEXUS_MASTER_PORT: "1099"
+
+      NEXUS_FRONTEND_ORIGIN: "http://localhost:3000"
+
+      NEXUS_JWT_SECRET: "${NEXUS_JWT_SECRET:?JWT secret required}"
+
+      NEXUS_ADMIN_EMAIL: "${NEXUS_ADMIN_EMAIL:?Admin email required}"
+
+      NEXUS_ADMIN_PASSWORD: "${NEXUS_ADMIN_PASSWORD:?Admin password required}"
+
+      NEXUS_USER_FILE: "/app/data/security/users.properties"
+
+    command:
+      - java
+      - -jar
+      - api.jar
+
+    volumes:
+      - ./data/security:/app/data/security
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "bash -c 'echo > /dev/tcp/127.0.0.1/8080'"
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 20s
+
+
+  frontend:
+
+    image: nexus-cloud-frontend:local
+
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+
+      args:
+        NEXT_PUBLIC_API_URL: "http://localhost:8080/api"
+
+    init: true
+
+    restart: "on-failure:3"
+
+    depends_on:
+      api:
+        condition: service_healthy
+
+    ports:
+      - "127.0.0.1:3000:3000"
