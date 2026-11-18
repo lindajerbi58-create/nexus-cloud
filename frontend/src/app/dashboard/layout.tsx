@@ -21,6 +21,7 @@ import {
   Network,
   FlaskConical,
   Gauge,
+  Power,
   Settings,
   LogOut,
   Search,
@@ -44,7 +45,6 @@ export default function DashboardLayout({
 }: {
   children: ReactNode;
 }) {
-
   const {
     user,
     loading,
@@ -58,10 +58,17 @@ export default function DashboardLayout({
 
   const pathname = usePathname();
 
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobile, setMobile] = useState(false);
-  const [palette, setPalette] = useState(false);
-  const [query, setQuery] = useState("");
+  const [collapsed, setCollapsed] =
+    useState(false);
+
+  const [mobile, setMobile] =
+    useState(false);
+
+  const [palette, setPalette] =
+    useState(false);
+
+  const [query, setQuery] =
+    useState("");
 
   useEffect(() => {
 
@@ -79,40 +86,40 @@ export default function DashboardLayout({
         (event.ctrlKey || event.metaKey) &&
         event.key.toLowerCase() === "k"
       ) {
-
         event.preventDefault();
-        setPalette(value => !value);
 
+        setPalette(value => !value);
       }
 
       if (event.key === "Escape") {
-
         setPalette(false);
         setMobile(false);
-
       }
     }
 
-    window.addEventListener("keydown", handleKey);
+    window.addEventListener(
+      "keydown",
+      handleKey
+    );
 
     return () =>
-      window.removeEventListener("keydown", handleKey);
+      window.removeEventListener(
+        "keydown",
+        handleKey
+      );
 
   }, []);
 
   if (loading || !authenticated || !user) {
-
     return (
-
-      <main className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center">
 
         <LoaderCircle
           size={32}
           className="animate-spin text-orange-500"
         />
 
-      </main>
-
+      </div>
     );
   }
 
@@ -172,6 +179,11 @@ export default function DashboardLayout({
                 href: "/dashboard/chaos",
                 icon: FlaskConical,
               },
+              {
+                label: "Chaos Control Center",
+                href: "/dashboard/chaos/control",
+                icon: Power,
+              },
             ],
           },
 
@@ -201,20 +213,18 @@ export default function DashboardLayout({
     )?.label || "Workspace";
 
   const results = links.filter(
-    link => link.label.toLowerCase()
-      .includes(query.toLowerCase())
+    link =>
+      link.label.toLowerCase()
+        .includes(query.toLowerCase())
   );
 
   function navigate(href: string) {
 
     setPalette(false);
-
     setMobile(false);
-
     setQuery("");
 
     router.push(href);
-
   }
 
   function signOut() {
@@ -222,7 +232,6 @@ export default function DashboardLayout({
     logout();
 
     router.replace("/login");
-
   }
 
   return (
@@ -240,7 +249,6 @@ export default function DashboardLayout({
       )}
 
       <aside className={cn(
-
         "v2-sidebar fixed inset-y-0 left-0 z-50 flex w-[268px] flex-col border-r border-[var(--v2-border)] transition-all duration-300",
 
         "lg:sticky lg:top-0 lg:h-screen lg:translate-x-0",
@@ -250,7 +258,6 @@ export default function DashboardLayout({
         mobile
           ? "translate-x-0"
           : "-translate-x-full"
-
       )}>
 
         <div className="flex h-20 shrink-0 items-center gap-3 px-5">
@@ -326,6 +333,7 @@ export default function DashboardLayout({
 
               <p className={cn(
                 "mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--v2-muted)]",
+
                 collapsed && "lg:hidden"
               )}>
                 {group.label}
@@ -554,9 +562,7 @@ export default function DashboardLayout({
                 onClick={() => setPalette(false)}
                 aria-label="Close palette"
               >
-
                 <X size={19} />
-
               </button>
 
             </div>
@@ -568,7 +574,9 @@ export default function DashboardLayout({
                 <button
                   key={link.href}
                   className="v2-nav-item w-full"
-                  onClick={() => navigate(link.href)}
+                  onClick={() =>
+                    navigate(link.href)
+                  }
                 >
 
                   <link.icon size={19} />
