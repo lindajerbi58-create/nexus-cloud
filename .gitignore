@@ -36,3 +36,5 @@ Thumbs.db
 # Docker private configuration
 .env.docker
 !.env.docker.example
+
+/data-docker/
