@@ -7,148 +7,31 @@ import {
 } from "react";
 
 import Link from "next/link";
-
 import { useRouter } from "next/navigation";
 
 import {
-  Cloud,
-  ShieldCheck,
-  Layers3,
-  Activity,
-  ArrowRight,
-  Mail,
-  LockKeyhole,
+  ArrowUpRight,
+  ArrowLeft,
   Eye,
   EyeOff,
   LoaderCircle,
-  Server,
-  Database,
   AlertCircle,
+  ShieldCheck,
 } from "lucide-react";
 
 import { toast } from "sonner";
 
 import { useAuth } from "@/context/AuthContext";
-
 import { ApiException } from "@/lib/api";
 
 interface AuthScreenProps {
   mode: "login" | "register";
 }
 
-const features = [
-  {
-    icon: Layers3,
-    title: "Intelligent replication",
-    description:
-      "Your data is distributed across multiple storage nodes.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Secure workspaces",
-    description:
-      "Private files and role-based access control.",
-  },
-  {
-    icon: Activity,
-    title: "Automatic recovery",
-    description:
-      "Self-healing infrastructure built for resilience.",
-  },
-];
-
-function NetworkVisual() {
-  return (
-    <div className="relative mx-auto my-8 h-56 w-full max-w-md">
-
-      <div className="absolute left-1/2 top-1/2 h-44 w-44 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-600/10 blur-3xl" />
-
-      <svg
-        viewBox="0 0 400 220"
-        className="absolute h-full w-full"
-        aria-hidden="true"
-      >
-        <defs>
-          <linearGradient id="networkLine">
-            <stop
-              offset="0%"
-              stopColor="#2563eb"
-            />
-
-            <stop
-              offset="100%"
-              stopColor="#22d3ee"
-            />
-          </linearGradient>
-        </defs>
-
-        <g
-          stroke="url(#networkLine)"
-          strokeWidth="1.5"
-          fill="none"
-        >
-          <path d="M200 50 L65 165" />
-          <path d="M200 50 L200 165" />
-          <path d="M200 50 L335 165" />
-          <path
-            d="M65 165 L200 165 L335 165"
-            strokeDasharray="5 6"
-            opacity=".35"
-          />
-        </g>
-
-        <g
-          fill="#22d3ee"
-          className="animate-node"
-        >
-          <circle cx="132" cy="108" r="4" />
-          <circle cx="200" cy="105" r="4" />
-          <circle cx="268" cy="108" r="4" />
-        </g>
-      </svg>
-
-      <div className="absolute left-1/2 top-1 -translate-x-1/2">
-        <div className="flex flex-col items-center">
-          <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-blue-400/40 bg-[#122441] shadow-lg shadow-blue-500/10">
-            <Server
-              size={34}
-              className="text-cyan-300"
-            />
-          </div>
-
-          <span className="mt-2 text-xs tracking-widest text-blue-300">
-            MASTER
-          </span>
-        </div>
-      </div>
-
-      {[1, 2, 3].map((node, index) => (
-        <div
-          key={node}
-          className="absolute bottom-0 flex -translate-x-1/2 flex-col items-center"
-          style={{
-            left: `${16.25 + index * 33.75}%`,
-          }}
-        >
-          <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-cyan-400/25 bg-[#102032]">
-            <Database
-              size={26}
-              className="text-cyan-300"
-            />
-          </div>
-
-          <span className="mt-2 flex items-center gap-1 text-xs text-slate-400">
-            NODE 0{node}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export default function AuthScreen({
   mode,
 }: AuthScreenProps) {
+
   const router = useRouter();
 
   const {
@@ -158,45 +41,30 @@ export default function AuthScreen({
     loading,
   } = useAuth();
 
-  const isRegister =
-    mode === "register";
+  const isRegister = mode === "register";
 
-  const [email, setEmail] =
-    useState("");
-
-  const [password, setPassword] =
-    useState("");
-
-  const [confirmation, setConfirmation] =
-    useState("");
-
-  const [showPassword, setShowPassword] =
-    useState(false);
-
-  const [submitting, setSubmitting] =
-    useState(false);
-
-  const [error, setError] =
-    useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
+
     if (!loading && authenticated) {
       router.replace("/dashboard");
     }
-  }, [
-    authenticated,
-    loading,
-    router,
-  ]);
+
+  }, [authenticated, loading, router]);
 
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>
   ) {
+
     event.preventDefault();
 
-    if (submitting) {
-      return;
-    }
+    if (submitting) return;
 
     setError("");
 
@@ -204,19 +72,14 @@ export default function AuthScreen({
       isRegister &&
       password.length < 12
     ) {
-      setError(
-        "Your password must contain at least 12 characters."
-      );
-
+      setError("Use at least 12 characters.");
       return;
     }
 
     if (
-      isRegister &&
       new TextEncoder().encode(password).length > 72
     ) {
       setError("Password is too long.");
-
       return;
     }
 
@@ -225,13 +88,13 @@ export default function AuthScreen({
       password !== confirmation
     ) {
       setError("Passwords do not match.");
-
       return;
     }
 
     setSubmitting(true);
 
     try {
+
       const credentials = {
         email: email.trim(),
         password,
@@ -239,28 +102,24 @@ export default function AuthScreen({
 
       if (isRegister) {
         await register(credentials);
-
-        toast.success(
-          "Your workspace is ready"
-        );
+        toast.success("Account created");
       } else {
         await login(credentials);
-
-        toast.success(
-          "Welcome back to NEXUS"
-        );
+        toast.success("Access granted");
       }
 
       router.replace("/dashboard");
 
     } catch (error) {
+
       const message =
         error instanceof ApiException
           ? error.message
-          : "Something went wrong. Please try again.";
+          : "Unable to authenticate.";
 
       setError(message);
       toast.error(message);
+
     } finally {
       setSubmitting(false);
     }
@@ -268,351 +127,344 @@ export default function AuthScreen({
 
   if (loading || authenticated) {
     return (
-      <main className="glow-background flex min-h-screen items-center justify-center">
-        <LoaderCircle className="animate-spin text-cyan-400" />
+      <main className="flex min-h-screen items-center justify-center bg-[#f2f1eb]">
+
+        <LoaderCircle
+          size={32}
+          className="animate-spin text-[#ff5500]"
+        />
+
       </main>
     );
   }
 
   return (
-    <main className="glow-background min-h-screen">
 
-      <div className="grid-background min-h-screen">
+    <main className="grid min-h-screen bg-white text-[#121212] lg:grid-cols-2">
 
-        <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-7 lg:px-12">
+      <section className="relative hidden min-h-screen flex-col justify-between overflow-hidden bg-[#ff5500] p-12 lg:flex">
+
+        <div className="relative z-10 flex items-center justify-between">
 
           <Link
             href="/"
-            className="flex items-center gap-3"
+            className="text-3xl font-black tracking-tighter"
           >
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 shadow-lg shadow-blue-600/20">
-              <Cloud size={26} />
+            NEXUS®
+          </Link>
+
+          <span className="industrial-label">
+            ACCESS / 01
+          </span>
+
+        </div>
+
+        <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+
+          <svg
+            viewBox="0 0 400 400"
+            className="w-[85%] max-w-[600px]"
+            aria-hidden="true"
+          >
+
+            {[190, 150, 110, 70].map((radius) => (
+
+              <circle
+                key={radius}
+                cx="200"
+                cy="200"
+                r={radius}
+                fill="none"
+                stroke="#121212"
+                strokeOpacity=".25"
+              />
+
+            ))}
+
+            <path
+              d="M200 0V400M0 200H400"
+              stroke="#121212"
+              strokeOpacity=".25"
+            />
+
+            <path
+              d="M70 320V80L330 320V80"
+              fill="none"
+              stroke="#121212"
+              strokeWidth="48"
+            />
+
+          </svg>
+
+        </div>
+
+        <div className="relative z-10">
+
+          <div className="mb-8 h-2 w-20 bg-black" />
+
+          <h1 className="industrial-title text-6xl xl:text-8xl">
+
+            ACCESS
+
+            <br />
+
+            YOUR
+
+            <br />
+
+            NETWORK.
+
+          </h1>
+
+          <p className="industrial-label mt-8">
+
+            SECURE / DISTRIBUTED / RESILIENT
+
+          </p>
+
+        </div>
+
+      </section>
+
+      <section className="flex min-h-screen flex-col px-7 py-8 sm:px-14 lg:px-20">
+
+        <div className="flex items-center justify-between">
+
+          <Link
+            href="/"
+            className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider"
+          >
+
+            <ArrowLeft size={16} />
+
+            Home
+
+          </Link>
+
+          <span className="industrial-label">
+            NEXUS®
+          </span>
+
+        </div>
+
+        <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center py-16">
+
+          <p className="industrial-label flex items-center gap-3 text-[#777772]">
+
+            <span className="h-2 w-2 bg-[#ff5500]" />
+
+            {isRegister
+              ? "02 / REGISTRATION"
+              : "01 / AUTHENTICATION"}
+
+          </p>
+
+          <h2 className="industrial-title mt-8 text-6xl sm:text-7xl">
+
+            {isRegister ? "JOIN NEXUS" : "SIGN IN"}
+
+            <span className="text-[#ff5500]">.</span>
+
+          </h2>
+
+          <p className="mt-6 text-sm leading-6 text-[#777772]">
+
+            {isRegister
+              ? "Create your private distributed workspace."
+              : "Enter your credentials to access your workspace."}
+
+          </p>
+
+          <form
+            onSubmit={handleSubmit}
+            className="mt-10 space-y-6"
+          >
+
+            {error && (
+
+              <div
+                role="alert"
+                className="flex items-start gap-3 border border-red-300 bg-red-50 p-4 text-sm text-red-800"
+              >
+
+                <AlertCircle
+                  size={18}
+                  className="shrink-0"
+                />
+
+                {error}
+
+              </div>
+
+            )}
+
+            <div>
+
+              <label
+                htmlFor="email"
+                className="industrial-label mb-3 block"
+              >
+                Email address
+              </label>
+
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="nexus-input"
+                placeholder="you@example.com"
+                autoComplete="email"
+                maxLength={254}
+                required
+              />
+
             </div>
 
             <div>
-              <div className="text-lg font-bold tracking-wider">
-                NEXUS
-                <span className="text-cyan-400">
-                  {" "}CLOUD
-                </span>
-              </div>
 
-              <p className="text-[10px] tracking-[0.2em] text-slate-500">
-                DISTRIBUTED STORAGE
-              </p>
-            </div>
-          </Link>
+              <label
+                htmlFor="password"
+                className="industrial-label mb-3 block"
+              >
+                Password
+              </label>
 
-          <div className="hidden items-center gap-2 rounded-full border border-slate-700 bg-slate-900/70 px-4 py-2 text-xs text-slate-400 sm:flex">
-            <ShieldCheck
-              size={15}
-              className="text-cyan-400"
-            />
+              <div className="relative">
 
-            JWT Authentication
-          </div>
-        </header>
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="nexus-input"
+                  style={{ paddingRight: 48 }}
+                  placeholder="Enter password"
+                  autoComplete={
+                    isRegister
+                      ? "new-password"
+                      : "current-password"
+                  }
+                  required
+                />
 
-        <div className="mx-auto grid max-w-7xl items-center gap-12 px-6 py-12 lg:min-h-[75vh] lg:grid-cols-[1.2fr_1fr] lg:gap-24 lg:px-12">
-
-          <section className="animate-fade-in">
-
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-xs font-medium tracking-widest text-blue-300">
-              DISTRIBUTED BY DESIGN
-            </div>
-
-            <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
-
-              Your data.
-
-              <br />
-
-              <span className="gradient-text">
-                Beyond a single server.
-              </span>
-
-            </h1>
-
-            <p className="mt-6 max-w-lg text-base leading-8 text-slate-400">
-
-              A distributed cloud storage platform
-              engineered for reliability, security
-              and automatic fault recovery.
-
-            </p>
-
-            <NetworkVisual />
-
-            <div className="space-y-5">
-
-              {features.map((feature) => (
-                <div
-                  key={feature.title}
-                  className="flex items-start gap-4"
+                <button
+                  type="button"
+                  aria-label={
+                    showPassword
+                      ? "Hide password"
+                      : "Show password"
+                  }
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-4 text-[#777772]"
                 >
-                  <div className="rounded-xl border border-slate-700 bg-slate-900 p-3 text-cyan-400">
-                    <feature.icon size={20} />
-                  </div>
 
-                  <div>
-                    <h3 className="text-sm font-semibold">
-                      {feature.title}
-                    </h3>
+                  {showPassword
+                    ? <EyeOff size={18} />
+                    : <Eye size={18} />}
 
-                    <p className="mt-1 text-sm leading-6 text-slate-400">
-                      {feature.description}
-                    </p>
-                  </div>
-                </div>
-              ))}
-
-            </div>
-          </section>
-
-          <section className="nexus-glass animate-fade-in w-full rounded-3xl p-7 shadow-2xl sm:p-10">
-
-            <div className="mb-7 flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-400/20 bg-blue-600/10 text-blue-400">
-
-              <LockKeyhole size={26} />
-
-            </div>
-
-            <h2 className="text-3xl font-bold tracking-tight">
-
-              {isRegister
-                ? "Create your account"
-                : "Welcome back"}
-
-            </h2>
-
-            <p className="mt-3 text-sm leading-6 text-slate-400">
-
-              {isRegister
-                ? "Start your private distributed workspace."
-                : "Sign in to access your NEXUS workspace."}
-
-            </p>
-
-            <form
-              onSubmit={handleSubmit}
-              className="mt-8 space-y-5"
-            >
-
-              {error && (
-                <div
-                  role="alert"
-                  className="flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-300"
-                >
-                  <AlertCircle
-                    size={18}
-                    className="shrink-0"
-                  />
-
-                  {error}
-                </div>
-              )}
-
-              <div>
-                <label
-                  htmlFor="email"
-                  className="mb-2 block text-sm font-medium text-slate-300"
-                >
-                  Email address
-                </label>
-
-                <div className="relative">
-
-                  <Mail
-                    size={18}
-                    className="absolute left-4 top-4 text-slate-500"
-                  />
-
-                  <input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(event) =>
-                      setEmail(event.target.value)
-                    }
-                    placeholder="you@example.com"
-                    autoComplete="email"
-                    className="nexus-input pl-12"
-                    style={{ paddingLeft: 46 }}
-                    maxLength={254}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-
-                <label
-                  htmlFor="password"
-                  className="mb-2 block text-sm font-medium text-slate-300"
-                >
-                  Password
-                </label>
-
-                <div className="relative">
-
-                  <LockKeyhole
-                    size={18}
-                    className="absolute left-4 top-4 text-slate-500"
-                  />
-
-                  <input
-                    id="password"
-                    type={
-                      showPassword
-                        ? "text"
-                        : "password"
-                    }
-                    value={password}
-                    onChange={(event) =>
-                      setPassword(event.target.value)
-                    }
-                    placeholder="Enter your password"
-                    autoComplete={
-                      isRegister
-                        ? "new-password"
-                        : "current-password"
-                    }
-                    className="nexus-input"
-                    style={{
-                      paddingLeft: 46,
-                      paddingRight: 46,
-                    }}
-                    required
-                  />
-
-                  <button
-                    type="button"
-                    aria-label={
-                      showPassword
-                        ? "Hide password"
-                        : "Show password"
-                    }
-                    onClick={() =>
-                      setShowPassword(
-                        !showPassword
-                      )
-                    }
-                    className="absolute right-4 top-4 text-slate-500 hover:text-white"
-                  >
-                    {showPassword
-                      ? <EyeOff size={18} />
-                      : <Eye size={18} />}
-                  </button>
-
-                </div>
-
-                {isRegister && (
-                  <p className="mt-2 text-xs text-slate-500">
-                    Use at least 12 characters.
-                  </p>
-                )}
+                </button>
 
               </div>
 
               {isRegister && (
-                <div>
-
-                  <label
-                    htmlFor="confirmation"
-                    className="mb-2 block text-sm font-medium text-slate-300"
-                  >
-                    Confirm password
-                  </label>
-
-                  <input
-                    id="confirmation"
-                    type="password"
-                    autoComplete="new-password"
-                    value={confirmation}
-                    onChange={(event) =>
-                      setConfirmation(
-                        event.target.value
-                      )
-                    }
-                    placeholder="Repeat your password"
-                    className="nexus-input"
-                    required
-                  />
-
-                </div>
+                <p className="mt-2 text-xs text-[#777772]">
+                  Minimum 12 characters.
+                </p>
               )}
 
-              <button
-                type="submit"
-                disabled={submitting}
-                className="nexus-button mt-3 w-full"
-              >
+            </div>
 
-                {submitting ? (
-                  <>
-                    <LoaderCircle
-                      size={19}
-                      className="animate-spin"
-                    />
+            {isRegister && (
 
-                    Please wait...
-                  </>
-                ) : (
-                  <>
-                    {isRegister
-                      ? "Create account"
-                      : "Sign in"}
+              <div>
 
-                    <ArrowRight size={18} />
-                  </>
-                )}
+                <label
+                  htmlFor="confirmation"
+                  className="industrial-label mb-3 block"
+                >
+                  Confirm password
+                </label>
 
-              </button>
+                <input
+                  id="confirmation"
+                  type="password"
+                  value={confirmation}
+                  onChange={(e) =>
+                    setConfirmation(e.target.value)
+                  }
+                  autoComplete="new-password"
+                  className="nexus-input"
+                  placeholder="Repeat password"
+                  required
+                />
 
-            </form>
+              </div>
 
-            <div className="my-7 border-t border-slate-800" />
+            )}
 
-            <p className="text-center text-sm text-slate-400">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="flex min-h-14 w-full items-center justify-between bg-[#121212] px-6 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#ff5500] hover:text-black"
+            >
+
+              {submitting
+                ? "Processing..."
+                : isRegister
+                  ? "Create account"
+                  : "Sign in"}
+
+              {submitting
+                ? <LoaderCircle className="animate-spin" size={20} />
+                : <ArrowUpRight size={21} />}
+
+            </button>
+
+          </form>
+
+          <div className="mt-8 border-t border-black/15 pt-6 text-sm">
+
+            <span className="text-[#777772]">
 
               {isRegister
-                ? "Already have an account?"
+                ? "Already registered?"
                 : "New to NEXUS?"}
 
-              {" "}
+            </span>
 
-              <Link
-                href={
-                  isRegister
-                    ? "/login"
-                    : "/register"
-                }
-                className="font-semibold text-blue-400 hover:text-cyan-300"
-              >
+            {" "}
 
-                {isRegister
-                  ? "Sign in"
-                  : "Create an account"}
+            <Link
+              href={isRegister ? "/login" : "/register"}
+              className="font-bold underline decoration-[#ff5500] underline-offset-4"
+            >
 
-              </Link>
+              {isRegister
+                ? "Sign in"
+                : "Create an account"}
 
-            </p>
-          </section>
+            </Link>
+
+          </div>
+
         </div>
 
-        <footer className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 border-t border-slate-800/60 px-6 py-6 text-xs text-slate-500 lg:px-12">
+        <div className="flex items-center gap-3 border-t border-black/15 pt-6">
 
-          <span>
-            © {new Date().getFullYear()} NEXUS Cloud
-          </span>
+          <ShieldCheck
+            size={19}
+            className="text-[#ff5500]"
+          />
 
-          <span>
-            Secure. Distributed. Resilient.
-          </span>
+          <p className="industrial-label text-[#777772]">
+            AUTHENTICATED WORKSPACE / JWT
+          </p>
 
-        </footer>
+        </div>
 
-      </div>
+      </section>
+
     </main>
   );
 }
