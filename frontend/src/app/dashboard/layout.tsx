@@ -9,8 +9,8 @@ import {
 import Link from "next/link";
 
 import {
-  usePathname,
   useRouter,
+  usePathname,
 } from "next/navigation";
 
 import {
@@ -19,6 +19,7 @@ import {
   FolderOpen,
   Workflow,
   Network,
+  FlaskConical,
   Settings,
   LogOut,
   Search,
@@ -29,7 +30,6 @@ import {
   ChevronRight,
   PanelLeftClose,
   PanelLeftOpen,
-  ShieldCheck,
   LoaderCircle,
   ArrowUpRight,
 } from "lucide-react";
@@ -37,7 +37,6 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 
 export default function DashboardLayout({
   children,
@@ -45,11 +44,14 @@ export default function DashboardLayout({
   children: ReactNode;
 }) {
 
-  const { user, loading, authenticated, logout } =
-    useAuth();
+  const {
+    user,
+    loading,
+    authenticated,
+    logout,
+  } = useAuth();
 
-  const { theme, toggleTheme } =
-    useTheme();
+  const { theme, toggleTheme } = useTheme();
 
   const router = useRouter();
   const pathname = usePathname();
@@ -69,7 +71,6 @@ export default function DashboardLayout({
   useEffect(() => {
 
     if (!loading && !authenticated) {
-
       router.replace("/login");
     }
 
@@ -96,13 +97,12 @@ export default function DashboardLayout({
       }
     }
 
-    window.addEventListener(
-      "keydown", handleKey
-    );
+    window.addEventListener("keydown", handleKey);
 
     return () =>
       window.removeEventListener(
-        "keydown", handleKey
+        "keydown",
+        handleKey
       );
 
   }, []);
@@ -111,15 +111,14 @@ export default function DashboardLayout({
 
     return (
 
-      <main className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center">
 
         <LoaderCircle
-          size={30}
+          size={32}
           className="animate-spin text-orange-500"
         />
 
-      </main>
-
+      </div>
     );
   }
 
@@ -151,16 +150,28 @@ export default function DashboardLayout({
     },
 
     ...(user.role === "ADMIN"
-      ? [{
-          label: "02 / Observe",
-          links: [
-            {
-              label: "Live Infrastructure",
-              href: "/dashboard/cluster",
-              icon: Network,
-            },
-          ],
-        }]
+      ? [
+          {
+            label: "02 / Observe",
+            links: [
+              {
+                label: "Live Infrastructure",
+                href: "/dashboard/cluster",
+                icon: Network,
+              },
+            ],
+          },
+          {
+            label: "03 / Experiment",
+            links: [
+              {
+                label: "Chaos Lab",
+                href: "/dashboard/chaos",
+                icon: FlaskConical,
+              },
+            ],
+          },
+        ]
       : []),
 
     {
@@ -175,13 +186,13 @@ export default function DashboardLayout({
     },
   ];
 
-  const links =
-    groups.flatMap(group => group.links);
+  const links = groups.flatMap(
+    group => group.links
+  );
 
-  const activePage =
-    links.find(link =>
-      link.href === pathname
-    )?.label || "Workspace";
+  const currentPage =
+    links.find(link => link.href === pathname)
+      ?.label || "Workspace";
 
   const results = links.filter(link =>
     link.label.toLowerCase()
@@ -197,15 +208,6 @@ export default function DashboardLayout({
     router.push(href);
   }
 
-  function signOut() {
-
-    logout();
-
-    toast.success("Signed out");
-
-    router.replace("/login");
-  }
-
   return (
 
     <div className="v2-shell flex min-h-screen">
@@ -213,8 +215,8 @@ export default function DashboardLayout({
       {mobile && (
 
         <button
-          aria-label="Close menu"
           className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          aria-label="Close menu"
           onClick={() => setMobile(false)}
         />
 
@@ -238,7 +240,7 @@ export default function DashboardLayout({
 
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-black">
 
-              <Layers3 size={23} />
+              <Layers3 size={22} />
 
             </div>
 
@@ -257,9 +259,9 @@ export default function DashboardLayout({
           </Link>
 
           <button
-            className="ml-auto lg:hidden"
             onClick={() => setMobile(false)}
-            aria-label="Close menu"
+            className="ml-auto lg:hidden"
+            aria-label="Close sidebar"
           >
             <X size={20} />
           </button>
@@ -284,7 +286,7 @@ export default function DashboardLayout({
             </span>
 
             <kbd className={cn(
-              "rounded border border-[var(--v2-border)] px-1.5 py-1 text-[10px]",
+              "text-[10px]",
               collapsed && "lg:hidden"
             )}>
               Ctrl K
@@ -294,7 +296,7 @@ export default function DashboardLayout({
 
         </div>
 
-        <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-6">
+        <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-7">
 
           {groups.map(group => (
 
@@ -304,9 +306,7 @@ export default function DashboardLayout({
                 "mb-3 px-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--v2-muted)]",
                 collapsed && "lg:hidden"
               )}>
-
                 {group.label}
-
               </p>
 
               <div className="space-y-1">
@@ -317,13 +317,11 @@ export default function DashboardLayout({
                     key={link.href}
                     href={link.href}
                     title={link.label}
+                    onClick={() => setMobile(false)}
                     aria-current={
                       pathname === link.href
                         ? "page"
                         : undefined
-                    }
-                    onClick={() =>
-                      setMobile(false)
                     }
                     className={cn(
                       "v2-nav-item",
@@ -332,7 +330,10 @@ export default function DashboardLayout({
                     )}
                   >
 
-                    <link.icon className="shrink-0" size={19} />
+                    <link.icon
+                      size={19}
+                      className="shrink-0"
+                    />
 
                     <span className={cn(
                       "flex-1",
@@ -359,10 +360,10 @@ export default function DashboardLayout({
 
           <button
             className="v2-nav-item hidden w-full lg:flex"
+            aria-label="Toggle sidebar"
             onClick={() =>
               setCollapsed(value => !value)
             }
-            aria-label="Toggle sidebar"
           >
 
             {collapsed
@@ -403,11 +404,16 @@ export default function DashboardLayout({
 
           <button
             className="v2-nav-item w-full"
-            onClick={signOut}
             aria-label="Sign out"
+            onClick={() => {
+
+              logout();
+
+              router.replace("/login");
+            }}
           >
 
-            <LogOut size={19} />
+            <LogOut size={18} />
 
             <span className={collapsed ? "lg:hidden" : ""}>
               Sign out
@@ -427,7 +433,7 @@ export default function DashboardLayout({
 
             <button
               className="lg:hidden"
-              aria-label="Open menu"
+              aria-label="Open navigation"
               onClick={() => setMobile(true)}
             >
 
@@ -441,11 +447,11 @@ export default function DashboardLayout({
 
             <ChevronRight
               size={14}
-              className="hidden text-[var(--v2-muted)] sm:block"
+              className="hidden sm:block"
             />
 
             <span className="truncate font-semibold">
-              {activePage}
+              {currentPage}
             </span>
 
           </div>
@@ -454,8 +460,8 @@ export default function DashboardLayout({
 
             <button
               className="v2-icon-button"
+              aria-label="Search"
               onClick={() => setPalette(true)}
-              aria-label="Search commands"
             >
 
               <Search size={19} />
@@ -464,8 +470,8 @@ export default function DashboardLayout({
 
             <button
               className="v2-icon-button"
+              aria-label="Switch theme"
               onClick={toggleTheme}
-              aria-label="Change theme"
             >
 
               {theme === "light"
@@ -474,15 +480,8 @@ export default function DashboardLayout({
 
             </button>
 
-            <span className="hidden items-center gap-2 rounded-full border border-[var(--v2-border)] px-3 py-2 text-xs sm:flex">
-
-              <ShieldCheck
-                size={15}
-                className="text-green-600"
-              />
-
+            <span className="rounded-full border border-[var(--v2-border)] px-3 py-2 text-xs">
               {user.role}
-
             </span>
 
           </div>
@@ -506,9 +505,7 @@ export default function DashboardLayout({
             role="dialog"
             aria-modal="true"
             aria-label="Command palette"
-            onClick={event =>
-              event.stopPropagation()
-            }
+            onClick={event => event.stopPropagation()}
             className="w-full max-w-lg overflow-hidden rounded-2xl border border-[var(--v2-border)] bg-[var(--v2-surface)] shadow-2xl"
           >
 
@@ -528,11 +525,10 @@ export default function DashboardLayout({
                     event.key === "Enter" &&
                     results[0]
                   ) {
-
                     navigate(results[0].href);
                   }
                 }}
-                placeholder="Search commands..."
+                placeholder="Find a command..."
                 className="min-w-0 flex-1 bg-transparent text-sm outline-none"
               />
 
@@ -540,9 +536,7 @@ export default function DashboardLayout({
                 aria-label="Close palette"
                 onClick={() => setPalette(false)}
               >
-
                 <X size={19} />
-
               </button>
 
             </div>
@@ -553,10 +547,8 @@ export default function DashboardLayout({
 
                 <button
                   key={link.href}
-                  onClick={() =>
-                    navigate(link.href)
-                  }
                   className="v2-nav-item w-full"
+                  onClick={() => navigate(link.href)}
                 >
 
                   <link.icon size={19} />
@@ -573,7 +565,7 @@ export default function DashboardLayout({
 
               {!results.length && (
 
-                <p className="p-6 text-center text-sm text-[var(--v2-muted)]">
+                <p className="p-5 text-center text-sm text-[var(--v2-muted)]">
                   No matching commands.
                 </p>
 
