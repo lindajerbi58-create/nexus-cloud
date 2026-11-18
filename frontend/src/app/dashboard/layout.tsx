@@ -9,8 +9,8 @@ import {
 import Link from "next/link";
 
 import {
-  useRouter,
   usePathname,
+  useRouter,
 } from "next/navigation";
 
 import {
@@ -20,6 +20,7 @@ import {
   Workflow,
   Network,
   FlaskConical,
+  Gauge,
   Settings,
   LogOut,
   Search,
@@ -54,19 +55,13 @@ export default function DashboardLayout({
   const { theme, toggleTheme } = useTheme();
 
   const router = useRouter();
+
   const pathname = usePathname();
 
-  const [collapsed, setCollapsed] =
-    useState(false);
-
-  const [mobile, setMobile] =
-    useState(false);
-
-  const [palette, setPalette] =
-    useState(false);
-
-  const [query, setQuery] =
-    useState("");
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobile, setMobile] = useState(false);
+  const [palette, setPalette] = useState(false);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
 
@@ -86,24 +81,22 @@ export default function DashboardLayout({
       ) {
 
         event.preventDefault();
-
         setPalette(value => !value);
+
       }
 
       if (event.key === "Escape") {
 
         setPalette(false);
         setMobile(false);
+
       }
     }
 
     window.addEventListener("keydown", handleKey);
 
     return () =>
-      window.removeEventListener(
-        "keydown",
-        handleKey
-      );
+      window.removeEventListener("keydown", handleKey);
 
   }, []);
 
@@ -111,18 +104,20 @@ export default function DashboardLayout({
 
     return (
 
-      <div className="flex min-h-screen items-center justify-center">
+      <main className="flex min-h-screen items-center justify-center">
 
         <LoaderCircle
           size={32}
           className="animate-spin text-orange-500"
         />
 
-      </div>
+      </main>
+
     );
   }
 
   const groups = [
+
     {
       label: "Workspace",
       links: [
@@ -133,6 +128,7 @@ export default function DashboardLayout({
         },
       ],
     },
+
     {
       label: "01 / Store",
       links: [
@@ -151,6 +147,7 @@ export default function DashboardLayout({
 
     ...(user.role === "ADMIN"
       ? [
+
           {
             label: "02 / Observe",
             links: [
@@ -159,8 +156,14 @@ export default function DashboardLayout({
                 href: "/dashboard/cluster",
                 icon: Network,
               },
+              {
+                label: "Engineering Analytics",
+                href: "/dashboard/analytics",
+                icon: Gauge,
+              },
             ],
           },
+
           {
             label: "03 / Experiment",
             links: [
@@ -171,6 +174,7 @@ export default function DashboardLayout({
               },
             ],
           },
+
         ]
       : []),
 
@@ -184,6 +188,7 @@ export default function DashboardLayout({
         },
       ],
     },
+
   ];
 
   const links = groups.flatMap(
@@ -191,21 +196,33 @@ export default function DashboardLayout({
   );
 
   const currentPage =
-    links.find(link => link.href === pathname)
-      ?.label || "Workspace";
+    links.find(
+      link => link.href === pathname
+    )?.label || "Workspace";
 
-  const results = links.filter(link =>
-    link.label.toLowerCase()
+  const results = links.filter(
+    link => link.label.toLowerCase()
       .includes(query.toLowerCase())
   );
 
   function navigate(href: string) {
 
     setPalette(false);
+
     setMobile(false);
+
     setQuery("");
 
     router.push(href);
+
+  }
+
+  function signOut() {
+
+    logout();
+
+    router.replace("/login");
+
   }
 
   return (
@@ -216,29 +233,34 @@ export default function DashboardLayout({
 
         <button
           className="fixed inset-0 z-40 bg-black/50 lg:hidden"
-          aria-label="Close menu"
+          aria-label="Close navigation"
           onClick={() => setMobile(false)}
         />
 
       )}
 
       <aside className={cn(
-        "v2-sidebar fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-[var(--v2-border)] transition-all duration-300",
+
+        "v2-sidebar fixed inset-y-0 left-0 z-50 flex w-[268px] flex-col border-r border-[var(--v2-border)] transition-all duration-300",
+
         "lg:sticky lg:top-0 lg:h-screen lg:translate-x-0",
+
         collapsed && "lg:w-[76px]",
+
         mobile
           ? "translate-x-0"
           : "-translate-x-full"
+
       )}>
 
-        <div className="flex h-20 items-center gap-3 px-5">
+        <div className="flex h-20 shrink-0 items-center gap-3 px-5">
 
           <Link
             href="/dashboard"
-            className="flex shrink-0 items-center gap-3"
+            className="flex items-center gap-3"
           >
 
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-black">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-black">
 
               <Layers3 size={22} />
 
@@ -259,9 +281,9 @@ export default function DashboardLayout({
           </Link>
 
           <button
-            onClick={() => setMobile(false)}
             className="ml-auto lg:hidden"
-            aria-label="Close sidebar"
+            onClick={() => setMobile(false)}
+            aria-label="Close menu"
           >
             <X size={20} />
           </button>
@@ -273,7 +295,7 @@ export default function DashboardLayout({
           <button
             className="v2-nav-item w-full"
             onClick={() => setPalette(true)}
-            aria-label="Open command palette"
+            aria-label="Search commands"
           >
 
             <Search size={18} />
@@ -296,14 +318,14 @@ export default function DashboardLayout({
 
         </div>
 
-        <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-7">
+        <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-6">
 
           {groups.map(group => (
 
             <section key={group.label}>
 
               <p className={cn(
-                "mb-3 px-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--v2-muted)]",
+                "mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--v2-muted)]",
                 collapsed && "lg:hidden"
               )}>
                 {group.label}
@@ -360,10 +382,10 @@ export default function DashboardLayout({
 
           <button
             className="v2-nav-item hidden w-full lg:flex"
-            aria-label="Toggle sidebar"
             onClick={() =>
               setCollapsed(value => !value)
             }
+            aria-label="Toggle sidebar"
           >
 
             {collapsed
@@ -405,12 +427,7 @@ export default function DashboardLayout({
           <button
             className="v2-nav-item w-full"
             aria-label="Sign out"
-            onClick={() => {
-
-              logout();
-
-              router.replace("/login");
-            }}
+            onClick={signOut}
           >
 
             <LogOut size={18} />
@@ -460,7 +477,7 @@ export default function DashboardLayout({
 
             <button
               className="v2-icon-button"
-              aria-label="Search"
+              aria-label="Open search"
               onClick={() => setPalette(true)}
             >
 
@@ -527,16 +544,19 @@ export default function DashboardLayout({
                   ) {
                     navigate(results[0].href);
                   }
+
                 }}
                 placeholder="Find a command..."
                 className="min-w-0 flex-1 bg-transparent text-sm outline-none"
               />
 
               <button
-                aria-label="Close palette"
                 onClick={() => setPalette(false)}
+                aria-label="Close palette"
               >
+
                 <X size={19} />
+
               </button>
 
             </div>
@@ -580,5 +600,6 @@ export default function DashboardLayout({
       )}
 
     </div>
+
   );
 }
