@@ -129,4 +129,51 @@ public class BlockTransferClient {
             checkResponse(input);
         }
     }
+    public boolean blockExists(
+        StorageNodeInfo node,
+        String blockId
+) throws IOException {
+
+    try (
+            Socket socket = connect(node);
+            DataInputStream input =
+                    new DataInputStream(socket.getInputStream());
+            DataOutputStream output =
+                    new DataOutputStream(socket.getOutputStream())
+    ) {
+
+        output.writeUTF(StorageProtocol.EXISTS);
+        output.writeUTF(blockId);
+        output.flush();
+
+        checkResponse(input);
+
+        return input.readBoolean();
+    }
+}
+
+public void deleteBlock(
+        StorageNodeInfo node,
+        String blockId
+) throws IOException {
+
+    if (!blockExists(node, blockId)) {
+        return;
+    }
+
+    try (
+            Socket socket = connect(node);
+            DataInputStream input =
+                    new DataInputStream(socket.getInputStream());
+            DataOutputStream output =
+                    new DataOutputStream(socket.getOutputStream())
+    ) {
+
+        output.writeUTF(StorageProtocol.DELETE);
+        output.writeUTF(blockId);
+        output.flush();
+
+        checkResponse(input);
+    }
+}
 }
