@@ -1,4 +1,4 @@
-package main.java.com.nexuscloud.api.service;
+package com.nexuscloud.api.service;
 
 import com.nexuscloud.client.DistributedFileClient;
 import com.nexuscloud.common.model.FileMetadata;
@@ -32,51 +32,33 @@ public class NexusService {
             @Value("${nexus.master.host}") String host,
             @Value("${nexus.master.port}") int port
     ) {
-
         this.host = host;
         this.port = port;
     }
 
     private Registry registry() throws Exception {
-
-        return LocateRegistry.getRegistry(
-                host,
-                port
-        );
+        return LocateRegistry.getRegistry(host, port);
     }
 
-    public MasterService master()
-            throws Exception {
-
+    public MasterService master() throws Exception {
         return (MasterService) registry()
                 .lookup("NexusMaster");
     }
 
-    public DirectoryService directory()
-            throws Exception {
-
+    public DirectoryService directory() throws Exception {
         return (DirectoryService) registry()
                 .lookup("NexusDirectory");
     }
 
-    private DistributedFileClient client()
-            throws Exception {
-
-        return new DistributedFileClient(
-                host,
-                port
-        );
+    private DistributedFileClient client() throws Exception {
+        return new DistributedFileClient(host, port);
     }
 
-    public List<FileMetadata> listFiles()
-            throws Exception {
-
+    public List<FileMetadata> listFiles() throws Exception {
         return master().listFiles();
     }
 
-    public FileMetadata getFile(String id)
-            throws Exception {
-
+    public FileMetadata getFile(String id) throws Exception {
         return master().getFile(id);
     }
 
@@ -86,8 +68,7 @@ public class NexusService {
             return "uploaded-file.bin";
         }
 
-        String normalized =
-                name.replace('\\', '/');
+        String normalized = name.replace('\\', '/');
 
         String result = normalized.substring(
                 normalized.lastIndexOf('/') + 1
@@ -113,14 +94,12 @@ public class NexusService {
     ) throws Exception {
 
         if (file == null || file.isEmpty()) {
-
             throw new IllegalArgumentException(
                     "File must not be empty"
             );
         }
 
-        String target = folder == null
-                || folder.isBlank()
+        String target = folder == null || folder.isBlank()
                 ? "/" : folder;
 
         directory().listFiles(target);
@@ -130,9 +109,7 @@ public class NexusService {
         );
 
         Path temporaryDirectory =
-                Files.createTempDirectory(
-                        "nexus-upload-"
-                );
+                Files.createTempDirectory("nexus-upload-");
 
         Path temporaryFile =
                 temporaryDirectory.resolve(name);
@@ -143,16 +120,10 @@ public class NexusService {
 
             file.transferTo(temporaryFile);
 
-            fileId = client().upload(
-                    temporaryFile
-            );
+            fileId = client().upload(temporaryFile);
 
             if (!target.equals("/")) {
-
-                directory().moveFile(
-                        fileId,
-                        target
-                );
+                directory().moveFile(fileId, target);
             }
 
             return getFile(fileId);
@@ -160,7 +131,6 @@ public class NexusService {
         } catch (Exception e) {
 
             if (fileId != null) {
-
                 try {
                     master().deleteFile(fileId);
                 } catch (Exception cleanupError) {
@@ -184,8 +154,7 @@ public class NexusService {
         }
     }
 
-    public byte[] download(String id)
-            throws Exception {
+    public byte[] download(String id) throws Exception {
 
         Path temporary = Files.createTempFile(
                 "nexus-download-",
@@ -193,25 +162,16 @@ public class NexusService {
         );
 
         try {
+            client().download(id, temporary);
 
-            client().download(
-                    id,
-                    temporary
-            );
-
-            return Files.readAllBytes(
-                    temporary
-            );
+            return Files.readAllBytes(temporary);
 
         } finally {
-
             Files.deleteIfExists(temporary);
         }
     }
 
-    public void deleteFile(String id)
-            throws Exception {
-
+    public void deleteFile(String id) throws Exception {
         master().deleteFile(id);
     }
 
@@ -219,25 +179,18 @@ public class NexusService {
             String id,
             String folder
     ) throws Exception {
-
         directory().moveFile(id, folder);
     }
 
-    public List<String> listDirectories()
-            throws Exception {
-
+    public List<String> listDirectories() throws Exception {
         return directory().listDirectories();
     }
 
-    public void createDirectory(String path)
-            throws Exception {
-
+    public void createDirectory(String path) throws Exception {
         directory().createDirectory(path);
     }
 
-    public void deleteDirectory(String path)
-            throws Exception {
-
+    public void deleteDirectory(String path) throws Exception {
         directory().deleteDirectory(path);
     }
 
@@ -247,8 +200,7 @@ public class NexusService {
 
         DirectoryService service = directory();
 
-        Map<String, Object> result =
-                new HashMap<>();
+        Map<String, Object> result = new HashMap<>();
 
         result.put("path", path);
 
@@ -265,8 +217,7 @@ public class NexusService {
         return result;
     }
 
-    public List<NodeHealthInfo> nodes()
-            throws Exception {
+    public List<NodeHealthInfo> nodes() throws Exception {
 
         return master().getNodeHealth()
                 .stream()
@@ -282,19 +233,13 @@ public class NexusService {
             throws Exception {
 
         List<NodeHealthInfo> nodes = nodes();
-
         List<FileMetadata> files = listFiles();
 
-        Set<String> onlineIds =
-                new HashSet<>();
+        Set<String> onlineIds = new HashSet<>();
 
         for (NodeHealthInfo node : nodes) {
-
             if (node.status() == NodeStatus.ONLINE) {
-
-                onlineIds.add(
-                        node.node().nodeId()
-                );
+                onlineIds.add(node.node().nodeId());
             }
         }
 
@@ -303,9 +248,7 @@ public class NexusService {
                 .sum();
 
         long usedBytes = nodes.stream()
-                .mapToLong(
-                        node -> node.node().usedCapacity()
-                )
+                .mapToLong(node -> node.node().usedCapacity())
                 .sum();
 
         long blocks = files.stream()
@@ -337,48 +280,28 @@ public class NexusService {
             }
         }
 
-        Map<String, Object> result =
-                new HashMap<>();
+        Map<String, Object> result = new HashMap<>();
 
         result.put("totalNodes", nodes.size());
-
         result.put("onlineNodes", onlineIds.size());
-
-        result.put(
-                "offlineNodes",
-                nodes.size() - onlineIds.size()
-        );
-
+        result.put("offlineNodes", nodes.size() - onlineIds.size());
         result.put("totalFiles", files.size());
-
         result.put("totalBlocks", blocks);
-
         result.put("totalReplicas", replicas);
-
-        result.put(
-                "availableReplicas",
-                availableReplicas
-        );
-
-        result.put(
-                "underReplicatedBlocks",
-                underReplicatedBlocks
-        );
-
+        result.put("availableReplicas", availableReplicas);
+        result.put("underReplicatedBlocks", underReplicatedBlocks);
         result.put("logicalBytes", logicalBytes);
-
         result.put("physicalUsedBytes", usedBytes);
-
         result.put("replicationFactor", 2);
 
         result.put(
                 "status",
                 nodes.isEmpty()
-                || onlineIds.size() < 2
-                || underReplicatedBlocks > 0
-                || onlineIds.size() < nodes.size()
-                ? "DEGRADED"
-                : "HEALTHY"
+                        || onlineIds.size() < 2
+                        || underReplicatedBlocks > 0
+                        || onlineIds.size() < nodes.size()
+                        ? "DEGRADED"
+                        : "HEALTHY"
         );
 
         return result;
